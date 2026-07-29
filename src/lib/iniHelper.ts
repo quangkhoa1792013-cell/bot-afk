@@ -269,3 +269,143 @@ export function serializeSectionsToIni(sections: INISection[], originalRawIni?: 
 
   return outputLines.join('\n');
 }
+
+export interface INIRepairResult {
+  repairedIni: string;
+  fixCount: number;
+  logs: string[];
+}
+
+// Auto-repair common syntax errors in MinecraftClient.ini
+export function fixAndSanitizeIniContent(rawIni: string): INIRepairResult {
+  const lines = rawIni.split(/\r?\n/);
+  const repairedLines: string[] = [];
+  let fixCount = 0;
+  const logs: string[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i];
+    const trimmed = line.trim();
+
+    // Skip empty lines or pure comment lines
+    if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith(';')) {
+      repairedLines.push(line);
+      continue;
+    }
+
+    // 1. Fix Section Headers e.g. [ChatBot.AutoRespond (missing ']') or [ChatBot.AutoRespond.]
+    if (trimmed.startsWith('[')) {
+      // Check if missing closing bracket
+      if (!trimmed.includes(']')) {
+        let name = trimmed.replace(/^\[+/, '').trim();
+        name = name.replace(/\.+$|^\.+/g, ''); // strip trailing or leading dots
+        line = `[${name}]`;
+        fixCount++;
+        logs.push(`Dòng ${i + 1}: Thêm dấu ']' còn thiếu cho section header -> [${name}]`);
+      } else {
+        // Has both brackets, clean up extra dots inside or outside e.g. [ChatBot.AutoRespond.]
+        const match = line.match(/^(\s*)\[+([^\]]+)\]+(\s*)$/);
+        if (match) {
+          const indent = match[1];
+          let secName = match[2].trim();
+          const cleanName = secName.replace(/^\.+|\.+$|(?<=\.)\.+/g, ''); // remove leading/trailing or double dots
+          if (secName !== cleanName) {
+            line = `${indent}[${cleanName}]`;
+            fixCount++;
+            logs.push(`Dòng ${i + 1}: Sửa tên section header -> [${cleanName}]`);
+          }
+        }
+      }
+      repairedLines.push(line);
+      continue;
+    }
+
+    // 2. Fix Inline Object Syntax e.g. Server = { Host = 127.0.0.1, Port = 25565 } or Account = { Login = geasf }
+    if (trimmed.includes('{') && trimmed.includes('}')) {
+      const kvMatch = line.match(/^(\s*)([a-zA-Z0-9_\-.\s"']+)=\s*\{(.*)\}(\s*#.*)?$/);
+      if (kvMatch) {
+        const indent = kvMatch[1];
+        const key = kvMatch[2].trim();
+        const inner = kvMatch[3];
+        const comment = kvMatch[4] || '';
+
+        // Process inner properties e.g. Host = 127.0.0.1, Port = 25565
+        const props = inner.split(',').map((p) => p.trim()).filter(Boolean);
+        let innerModified = false;
+
+        const fixedProps = props.map((prop) => {
+          const propMatch = prop.match(/^([a-zA-Z0-9_\-]+)\s*=\s*(.*)$/);
+          if (propMatch) {
+            const pKey = propMatch[1].trim();
+            let pVal = propMatch[2].trim();
+
+            // If value is not quoted, and is not a number, and is not true/false
+            if (!pVal.startsWith('"') && !pVal.startsWith("'") && pVal.toLowerCase() !== 'true' && pVal.toLowerCase() !== 'false' && isNaN(Number(pVal))) {
+              pVal = `"${pVal}"`;
+              innerModified = true;
+            }
+            return `${pKey} = ${pVal}`;
+          }
+          return prop;
+        });
+
+        if (innerModified) {
+          line = `${indent}${key} = { ${fixedProps.join(', ')} }${comment}`;
+          fixCount++;
+          logs.push(`Dòng ${i + 1}: Sửa dấu ngoặc kép cho đối tượng ${key} -> { ${fixedProps.join(', ')} }`);
+        }
+      }
+      repairedLines.push(line);
+      continue;
+    }
+
+    // 3. Fix Unquoted Strings e.g. Matches_File = matches.ini or ServerIP = 127.0.0.1 or File = chat.txt
+    const kvMatch = line.match(/^(\s*)([a-zA-Z0-9_\-.]+)\s*=\s*(.*)$/);
+    if (kvMatch) {
+      const indent = kvMatch[1];
+      const key = kvMatch[2].trim();
+      let valAndComment = kvMatch[3].trim();
+
+      // Separate inline comment
+      let val = valAndComment;
+      let comment = '';
+      const hashIdx = valAndComment.indexOf('#');
+      const semiIdx = valAndComment.indexOf(';');
+      const commentIdx = hashIdx !== -1 && semiIdx !== -1 ? Math.min(hashIdx, semiIdx) : (hashIdx !== -1 ? hashIdx : semiIdx);
+
+      if (commentIdx !== -1) {
+        val = valAndComment.slice(0, commentIdx).trim();
+        comment = ' ' + valAndComment.slice(commentIdx).trim();
+      }
+
+      // Check if value needs quoting
+      if (
+        val &&
+        !val.startsWith('"') &&
+        !val.startsWith("'") &&
+        !val.startsWith('[') &&
+        !val.startsWith('{') &&
+        val.toLowerCase() !== 'true' &&
+        val.toLowerCase() !== 'false'
+      ) {
+        // Check if pure integer or single decimal float (e.g. 25565 or 1.0)
+        const isPureNumber = !isNaN(Number(val)) && !val.includes('..') && !/^[0-9]+\.[0-9]+\.[0-9]+/.test(val);
+
+        if (!isPureNumber) {
+          const newVal = `"${val}"`;
+          line = `${indent}${key} = ${newVal}${comment}`;
+          fixCount++;
+          logs.push(`Dòng ${i + 1}: Thêm dấu ngoặc kép cho ${key} = ${newVal}`);
+        }
+      }
+    }
+
+    repairedLines.push(line);
+  }
+
+  return {
+    repairedIni: repairedLines.join('\n'),
+    fixCount,
+    logs,
+  };
+}

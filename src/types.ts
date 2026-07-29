@@ -39,7 +39,8 @@ export type WSMessageFromClient =
   | { type: 'SAVE_INI'; content: string }
   | { type: 'UPDATE_SERVER_ACCOUNT'; host: string; port?: number; username: string; password?: string; accountType?: string; method?: string }
   | { type: 'UPDATE_BOT_SETTING'; section: string; key: string; value: any }
-  | { type: 'ENABLE_SILENT_MODE' };
+  | { type: 'ENABLE_SILENT_MODE' }
+  | { type: 'AUTO_FIX_INI' };
 
 export type WSMessageFromServer =
   | { type: 'MCC_STATUS'; status: MCCProcessStatus }

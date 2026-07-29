@@ -30,6 +30,7 @@ import { MCCProcessStatus } from '../types';
 import {
   parseIniToSections,
   serializeSectionsToIni,
+  fixAndSanitizeIniContent,
   INISection,
   INISetting,
 } from '../lib/iniHelper';
@@ -44,6 +45,7 @@ interface MCCConfigEditorProps {
   iniContent: string;
   parsedIni: Record<string, any>;
   onSaveIni: (content: string) => void;
+  onAutoFixIni?: () => void;
   onUpdateServerAccount: (
     host: string,
     port: number,
@@ -58,6 +60,7 @@ interface MCCConfigEditorProps {
 export const MCCConfigEditor: React.FC<MCCConfigEditorProps> = ({
   iniContent,
   onSaveIni,
+  onAutoFixIni,
   onUpdateServerAccount,
   mccStatus,
 }) => {
@@ -168,6 +171,24 @@ export const MCCConfigEditor: React.FC<MCCConfigEditorProps> = ({
     setSaveMessage('Đã cập nhật file MinecraftClient.ini từ Raw Editor!');
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 3500);
+  };
+
+  // Auto-Fix INI syntax errors
+  const handleAutoFix = () => {
+    const repair = fixAndSanitizeIniContent(rawText);
+    setRawText(repair.repairedIni);
+    const parsed = parseIniToSections(repair.repairedIni);
+    setSections(parsed);
+    onSaveIni(repair.repairedIni);
+    if (onAutoFixIni) onAutoFixIni();
+
+    if (repair.fixCount > 0) {
+      setSaveMessage(`✅ [Đã Sửa Lỗi] Đã tự động sửa ${repair.fixCount} lỗi cú pháp INI (Ngoặc kép chuỗi file/IP/Server, đóng ngoặc section header)!`);
+    } else {
+      setSaveMessage('✅ Cú pháp MinecraftClient.ini đã chuẩn 100%, không phát hiện lỗi!');
+    }
+    setSaveSuccess(true);
+    setTimeout(() => setSaveSuccess(false), 4500);
   };
 
   // Handle Quick Connection Save
@@ -301,23 +322,47 @@ export const MCCConfigEditor: React.FC<MCCConfigEditorProps> = ({
             </button>
           </div>
 
-          {activeTab === 'visual' ? (
+          <div className="flex items-center gap-2">
             <button
-              onClick={handleSaveVisual}
-              className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow-lg shadow-emerald-950/50 cursor-pointer transition-colors"
+              onClick={handleAutoFix}
+              className="flex items-center gap-1.5 px-3 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-semibold shadow-md shadow-amber-950/50 cursor-pointer transition-all border border-amber-400/40"
+              title="Tự động kiểm tra và sửa lỗi ngoặc kép, đóng ngoặc section header trong MinecraftClient.ini"
             >
-              <Save className="w-4 h-4" />
-              Lưu Cấu Hình INI
+              <Sparkles className="w-4 h-4 text-amber-200 animate-pulse" />
+              🛠️ Sửa Lỗi Cú Pháp Tự Động
             </button>
-          ) : (
-            <button
-              onClick={handleSaveRaw}
-              className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow-lg shadow-emerald-950/50 cursor-pointer transition-colors"
-            >
-              <Save className="w-4 h-4" />
-              Lưu Raw Text
-            </button>
-          )}
+
+            {activeTab === 'visual' ? (
+              <button
+                onClick={handleSaveVisual}
+                className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow-lg shadow-emerald-950/50 cursor-pointer transition-colors"
+              >
+                <Save className="w-4 h-4" />
+                Lưu Cấu Hình INI
+              </button>
+            ) : (
+              <button
+                onClick={handleSaveRaw}
+                className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow-lg shadow-emerald-950/50 cursor-pointer transition-colors"
+              >
+                <Save className="w-4 h-4" />
+                Lưu Raw Text
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Quick Fix Guidelines Banner */}
+        <div className="bg-slate-900/90 border-t border-slate-800 px-5 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs font-mono text-slate-300">
+          <div className="flex items-center gap-2">
+            <Zap className="w-4 h-4 text-amber-400 shrink-0" />
+            <span className="font-semibold text-amber-300">Cẩm Nang Sửa Lỗi MinecraftClient.ini Quanh Dòng 14:</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-4 text-[11px] text-slate-400">
+            <span>1️⃣ Chuỗi/IP có dấu chấm: <code className="text-emerald-400 bg-slate-950 px-1 py-0.5 rounded">Matches_File = "matches.ini"</code></span>
+            <span>2️⃣ Header Mục: <code className="text-emerald-400 bg-slate-950 px-1 py-0.5 rounded">[ChatBot.AutoRespond]</code></span>
+            <span>3️⃣ Server Object: <code className="text-emerald-400 bg-slate-950 px-1 py-0.5 rounded">Server = &#123; Host = "127.0.0.1", Port = 25565 &#125;</code></span>
+          </div>
         </div>
       </div>
 

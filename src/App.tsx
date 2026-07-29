@@ -22,6 +22,7 @@ export default function App() {
     restartMCC,
     sendCommand,
     saveIni,
+    autoFixIni,
     updateServerAccount,
     clearLogs,
   } = useBotWebSocket();
@@ -214,6 +215,7 @@ export default function App() {
                 iniContent={iniContent}
                 parsedIni={parsedIni}
                 onSaveIni={saveIni}
+                onAutoFixIni={autoFixIni}
                 onUpdateServerAccount={updateServerAccount}
                 mccStatus={mccStatus}
               />

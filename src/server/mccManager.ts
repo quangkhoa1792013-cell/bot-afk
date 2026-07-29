@@ -6,6 +6,7 @@ import { WebSocket } from 'ws';
 import Convert from 'ansi-to-html';
 import ini from 'ini';
 import { MCCProcessStatus, ChatMessageLog, WSMessageFromServer, WSMessageFromClient } from '../types.js';
+import { fixAndSanitizeIniContent } from '../lib/iniHelper.js';
 
 
 const ansiConverter = new Convert({
@@ -201,6 +202,16 @@ export class MCCManager {
 
     await this.ensureBinaryAndIni();
 
+    // Auto-check and repair INI syntax errors before spawning process
+    try {
+      const currentIni = await this.getIniContent();
+      const repair = fixAndSanitizeIniContent(currentIni);
+      if (repair.fixCount > 0) {
+        await fsPromises.writeFile(this.iniPath, repair.repairedIni, 'utf-8');
+        this.addLog('system', `🛠️ [Tự Động Sửa Lỗi] Đã tự động khắc phục ${repair.fixCount} lỗi cú pháp trong MinecraftClient.ini trước khi khởi chạy.`);
+      }
+    } catch (e) {}
+
     this.addLog('system', '🚀 Launching Minecraft Console Client (MCC)...');
     try {
       this.mccProcess = spawn(this.binaryPath, [], {
@@ -312,13 +323,45 @@ export class MCCManager {
 
   public async saveIniContent(content: string): Promise<boolean> {
     try {
-      await fsPromises.writeFile(this.iniPath, content, 'utf-8');
-      this.addLog('system', '💾 Updated MinecraftClient.ini saved successfully!');
+      // Auto-sanitize INI content before saving
+      const repair = fixAndSanitizeIniContent(content);
+      const contentToSave = repair.repairedIni;
+
+      await fsPromises.writeFile(this.iniPath, contentToSave, 'utf-8');
+      if (repair.fixCount > 0) {
+        this.addLog('system', `💾 Đã lưu MinecraftClient.ini! Đồng thời tự động sửa ${repair.fixCount} lỗi cú pháp.`);
+      } else {
+        this.addLog('system', '💾 Updated MinecraftClient.ini saved successfully!');
+      }
       this.broadcastIniContent();
       this.broadcastStatus();
       return true;
     } catch (err: any) {
       this.addLog('error', `Failed to save MinecraftClient.ini: ${err.message}`);
+      return false;
+    }
+  }
+
+  public async autoFixIni(): Promise<boolean> {
+    try {
+      const currentIni = await this.getIniContent();
+      const repair = fixAndSanitizeIniContent(currentIni);
+
+      if (repair.fixCount > 0) {
+        await fsPromises.writeFile(this.iniPath, repair.repairedIni, 'utf-8');
+        this.addLog('system', `✅ [Sửa Lỗi INI Tự Động] Đã khắc phục thành công ${repair.fixCount} lỗi cú pháp:`);
+        for (const logItem of repair.logs) {
+          this.addLog('info', `  • ${logItem}`);
+        }
+      } else {
+        this.addLog('system', '✅ [Kiểm Tra Cú Pháp] File MinecraftClient.ini đã chuẩn 100%, không phát hiện lỗi cú pháp!');
+      }
+
+      this.broadcastIniContent();
+      this.broadcastStatus();
+      return true;
+    } catch (err: any) {
+      this.addLog('error', `Không thể tự động sửa file INI: ${err.message}`);
       return false;
     }
   }
@@ -467,6 +510,9 @@ export class MCCManager {
         break;
       case 'ENABLE_SILENT_MODE':
         this.enableSilentMode();
+        break;
+      case 'AUTO_FIX_INI':
+        this.autoFixIni();
         break;
     }
   }

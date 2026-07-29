@@ -126,6 +126,14 @@ export function useBotWebSocket() {
     send({ type: 'SAVE_INI', content });
   }, [send]);
 
+  const autoFixIni = useCallback(() => {
+    send({ type: 'AUTO_FIX_INI' });
+  }, [send]);
+
+  const enableSilentMode = useCallback(() => {
+    send({ type: 'ENABLE_SILENT_MODE' });
+  }, [send]);
+
   const updateServerAccount = useCallback((
     host: string,
     port: number,
@@ -161,6 +169,8 @@ export function useBotWebSocket() {
     sendCommand,
     sendChat,
     saveIni,
+    autoFixIni,
+    enableSilentMode,
     updateServerAccount,
     clearLogs,
   };
