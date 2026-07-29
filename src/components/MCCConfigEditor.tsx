@@ -174,7 +174,7 @@ export const MCCConfigEditor: React.FC<MCCConfigEditorProps> = ({
   const handleApplyQuickAccount = (e: React.FormEvent) => {
     e.preventDefault();
     const portNum = Number(quickPort);
-    const validPort = !isNaN(portNum) && portNum > 0 && portNum <= 65535 ? portNum : 25565;
+    const validPort = !isNaN(portNum) && portNum >= 0 && portNum <= 65535 ? portNum : 25565;
     if (validPort !== quickPort) setQuickPort(validPort);
     onUpdateServerAccount(quickHost, validPort, quickUser, quickPass, quickType, quickVersion);
     setSaveMessage(`Đã cập nhật kết nối server: ${quickHost}:${validPort} (${quickUser}) [MC ${quickVersion}]`);
@@ -345,11 +345,11 @@ export const MCCConfigEditor: React.FC<MCCConfigEditorProps> = ({
             <div>
               <label className="block text-[11px] font-mono text-slate-400 mb-1 flex items-center justify-between">
                 <span>Port</span>
-                <span className="text-[9px] text-slate-500 font-normal">Mặc định: 25565 | Max: 65535</span>
+                <span className="text-[9px] text-slate-500 font-normal">Mặc định: 25565 | Phạm vi: 0 - 65535</span>
               </label>
               <input
                 type="number"
-                min={1}
+                min={0}
                 max={65535}
                 value={quickPort}
                 onChange={(e) => setQuickPort(Number(e.target.value))}

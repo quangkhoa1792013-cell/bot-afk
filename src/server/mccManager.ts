@@ -336,7 +336,7 @@ export class MCCManager {
       let raw = await this.getIniContent();
       
       // Update Server Host & Port
-      const safePort = Number(port) > 0 && Number(port) <= 65535 ? Math.floor(Number(port)) : 25565;
+      const safePort = !isNaN(Number(port)) && Number(port) >= 0 && Number(port) <= 65535 ? Math.floor(Number(port)) : 25565;
       const portPart = `, Port = ${safePort}`;
       if (/Server\s*=\s*\{[^}]*\}/.test(raw)) {
         raw = raw.replace(/Server\s*=\s*\{[^}]*\}/, `Server = { Host = "${host}"${portPart} }`);
