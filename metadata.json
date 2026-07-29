@@ -1,0 +1,6 @@
+{
+  "name": "AquaMC Bot Control Center",
+  "description": "Minecraft Console Client (MCC) Web Control Panel with native Linux executable backend, live stream terminal, configuration editor, and quick commands",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
