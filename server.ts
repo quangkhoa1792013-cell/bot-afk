@@ -115,7 +115,7 @@ async function startServer() {
     ws.on('message', (data) => {
       try {
         const msg = JSON.parse(data.toString());
-        mccManager.handleClientMessage(msg);
+        mccManager.handleClientMessage(ws, msg);
       } catch (err) {
         console.error('WS parse error:', err);
       }

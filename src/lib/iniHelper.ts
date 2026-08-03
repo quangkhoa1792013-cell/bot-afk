@@ -48,7 +48,24 @@ export function getSectionCategory(sectionName: string): {
 
 // Known enums for specific keys
 const KNOWN_ENUMS: Record<string, string[]> = {
-  MinecraftVersion: ['auto', '1.20.4', '1.20.2', '1.20.1', '1.19.4', '1.19.3', '1.19.2', '1.18.2', '1.17.1', '1.16.5', '1.15.2', '1.14.4', '1.12.2', '1.8.9'],
+  MinecraftVersion: [
+    'auto',
+    '1.21.4', '1.21.3', '1.21.1', '1.21',
+    '1.20.6', '1.20.5', '1.20.4', '1.20.3', '1.20.2', '1.20.1', '1.20',
+    '1.19.4', '1.19.3', '1.19.2', '1.19.1', '1.19',
+    '1.18.2', '1.18.1', '1.18',
+    '1.17.1', '1.17',
+    '1.16.5', '1.16.4', '1.16.3', '1.16.2', '1.16.1', '1.16',
+    '1.15.2', '1.15.1', '1.15',
+    '1.14.4', '1.14.3', '1.14.2', '1.14.1', '1.14',
+    '1.13.2', '1.13.1', '1.13',
+    '1.12.2', '1.12.1', '1.12',
+    '1.11.2', '1.11',
+    '1.10.2', '1.10',
+    '1.9.4', '1.9.2', '1.9',
+    '1.8.9', '1.8.8', '1.8',
+    '1.7.10', '1.7.2', '1.6.4', '1.5.2', '1.4.6'
+  ],
   AccountType: ['mojang', 'microsoft', 'yggdrasil'],
   Method: ['mcc', 'browser'],
   InternalCmdChar: ['none', 'slash', 'backslash'],
@@ -339,8 +356,18 @@ export function fixAndSanitizeIniContent(rawIni: string): INIRepairResult {
             const pKey = propMatch[1].trim();
             let pVal = propMatch[2].trim();
 
-            // If value is not quoted, and is not a number, and is not true/false
-            if (!pVal.startsWith('"') && !pVal.startsWith("'") && pVal.toLowerCase() !== 'true' && pVal.toLowerCase() !== 'false' && isNaN(Number(pVal))) {
+            // Unquote erroneously quoted empty array strings e.g. Times = "[ ]"
+            if (pVal === '"[ ]"' || pVal === "'[ ]'") {
+              pVal = '[ ]';
+              innerModified = true;
+            } else if (
+              !pVal.startsWith('"') &&
+              !pVal.startsWith("'") &&
+              !pVal.startsWith('[') &&
+              pVal.toLowerCase() !== 'true' &&
+              pVal.toLowerCase() !== 'false' &&
+              isNaN(Number(pVal))
+            ) {
               pVal = `"${pVal}"`;
               innerModified = true;
             }
@@ -359,7 +386,7 @@ export function fixAndSanitizeIniContent(rawIni: string): INIRepairResult {
       continue;
     }
 
-    // 3. Fix Unquoted Strings e.g. Matches_File = matches.ini or ServerIP = 127.0.0.1 or File = chat.txt
+    // 3. Fix Unquoted Strings or TOML Array Keys e.g. ChatBot, Matches_File = matches.ini, ServerIP = 127.0.0.1
     const kvMatch = line.match(/^(\s*)([a-zA-Z0-9_\-.]+)\s*=\s*(.*)$/);
     if (kvMatch) {
       const indent = kvMatch[1];
@@ -378,7 +405,32 @@ export function fixAndSanitizeIniContent(rawIni: string): INIRepairResult {
         comment = ' ' + valAndComment.slice(commentIdx).trim();
       }
 
-      // Check if value needs quoting
+      // Check if key is a known TOML Array property (e.g. ChatBot, Bots, BotOwners, Matches, Excludes)
+      const ARRAY_KEYS = ['chatbot', 'bots', 'botowners', 'matches', 'excludes', 'packetdebugexclusions', 'entites_list', 'script', 'commands'];
+      const isArrayKey = ARRAY_KEYS.includes(key.toLowerCase());
+
+      if (isArrayKey) {
+        // If it's already formatted as a TOML array e.g. [ "AutoRespond" ], do not touch
+        if (val.startsWith('[') && val.endsWith(']')) {
+          repairedLines.push(line);
+          continue;
+        }
+
+        // Format unquoted list/string into a TOML Array e.g. ChatBot = [ "AutoRespond" ]
+        const items = val
+          .split(',')
+          .map((s) => s.trim().replace(/^["']|["']$/g, ''))
+          .filter(Boolean);
+
+        const newArrVal = items.length > 0 ? `[ ${items.map((it) => `"${it}"`).join(', ')} ]` : '[ ]';
+        line = `${indent}${key} = ${newArrVal}${comment}`;
+        fixCount++;
+        logs.push(`Dòng ${i + 1}: Chuyển ${key} thành Mảng TOML (Array) chuẩn -> ${newArrVal}`);
+        repairedLines.push(line);
+        continue;
+      }
+
+      // Check if general string value needs quoting
       if (
         val &&
         !val.startsWith('"') &&

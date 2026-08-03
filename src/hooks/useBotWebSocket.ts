@@ -5,10 +5,16 @@ import {
   PlayerPosition,
   WSMessageFromClient,
   WSMessageFromServer,
+  AccountSummary,
+  AccountProfile,
 } from '../types';
 
 export function useBotWebSocket() {
   const [wsConnected, setWsConnected] = useState(false);
+  const [accounts, setAccounts] = useState<AccountSummary[]>([]);
+  const [activeAccountId, setActiveAccountId] = useState<string>('acc-default');
+  const activeAccountIdRef = useRef<string>('acc-default');
+
   const [mccStatus, setMccStatus] = useState<MCCProcessStatus>({
     running: false,
     pid: null,
@@ -26,6 +32,11 @@ export function useBotWebSocket() {
   const [playerPosition, setPlayerPosition] = useState<PlayerPosition | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
+
+  // Keep ref updated
+  useEffect(() => {
+    activeAccountIdRef.current = activeAccountId;
+  }, [activeAccountId]);
 
   useEffect(() => {
     let isComponentMounted = true;
@@ -52,18 +63,51 @@ export function useBotWebSocket() {
         try {
           const message: WSMessageFromServer = JSON.parse(event.data);
           switch (message.type) {
+            case 'ACCOUNTS_LIST':
+              setAccounts(message.accounts);
+              if (message.activeAccountId) {
+                setActiveAccountId(message.activeAccountId);
+                activeAccountIdRef.current = message.activeAccountId;
+              }
+              break;
             case 'MCC_STATUS':
-              setMccStatus(message.status);
+              if (!message.accountId || message.accountId === activeAccountIdRef.current) {
+                setMccStatus(message.status);
+              }
+              // Update running state in accounts summary list
+              if (message.accountId) {
+                setAccounts((prev) =>
+                  prev.map((acc) =>
+                    acc.id === message.accountId
+                      ? {
+                          ...acc,
+                          running: message.status.running,
+                          pid: message.status.pid,
+                          uptimeSeconds: message.status.uptimeSeconds,
+                          serverHost: message.status.serverHost,
+                          serverPort: message.status.serverPort,
+                          username: message.status.username,
+                        }
+                      : acc
+                  )
+                );
+              }
               break;
             case 'LOG_MESSAGE':
-              setLogs((prev) => [...prev.slice(-999), message.log]);
+              if (!message.accountId || message.accountId === activeAccountIdRef.current) {
+                setLogs((prev) => [...prev.slice(-999), message.log]);
+              }
               break;
             case 'INI_CONTENT':
-              setIniContent(message.content);
-              if (message.parsed) setParsedIni(message.parsed);
+              if (!message.accountId || message.accountId === activeAccountIdRef.current) {
+                setIniContent(message.content);
+                if (message.parsed) setParsedIni(message.parsed);
+              }
               break;
             case 'POSITION_UPDATE':
-              setPlayerPosition(message.position);
+              if (!message.accountId || message.accountId === activeAccountIdRef.current) {
+                setPlayerPosition(message.position);
+              }
               break;
           }
         } catch (e) {
@@ -102,55 +146,100 @@ export function useBotWebSocket() {
     }
   }, []);
 
+  const selectAccount = useCallback(
+    (accountId: string) => {
+      setActiveAccountId(accountId);
+      activeAccountIdRef.current = accountId;
+      setLogs([]); // Clear logs when switching views
+      send({ type: 'SELECT_ACCOUNT', accountId });
+    },
+    [send]
+  );
+
+  const addAccount = useCallback(
+    (profile: Omit<AccountProfile, 'id'>) => {
+      send({ type: 'ADD_ACCOUNT', profile });
+    },
+    [send]
+  );
+
+  const updateAccount = useCallback(
+    (accountId: string, profile: Partial<AccountProfile>) => {
+      send({ type: 'UPDATE_ACCOUNT', accountId, profile });
+    },
+    [send]
+  );
+
+  const deleteAccount = useCallback(
+    (accountId: string) => {
+      send({ type: 'DELETE_ACCOUNT', accountId });
+    },
+    [send]
+  );
+
   const startMCC = useCallback(() => {
-    send({ type: 'START_MCC' });
+    send({ type: 'START_MCC', accountId: activeAccountIdRef.current });
   }, [send]);
 
   const stopMCC = useCallback(() => {
-    send({ type: 'STOP_MCC' });
+    send({ type: 'STOP_MCC', accountId: activeAccountIdRef.current });
   }, [send]);
 
   const restartMCC = useCallback(() => {
-    send({ type: 'RESTART_MCC' });
+    send({ type: 'RESTART_MCC', accountId: activeAccountIdRef.current });
   }, [send]);
 
-  const sendCommand = useCallback((command: string) => {
-    send({ type: 'SEND_COMMAND', command });
-  }, [send]);
+  const sendCommand = useCallback(
+    (command: string) => {
+      send({ type: 'SEND_COMMAND', command, accountId: activeAccountIdRef.current });
+    },
+    [send]
+  );
 
-  const sendChat = useCallback((message: string) => {
-    send({ type: 'SEND_CHAT', message });
-  }, [send]);
+  const sendChat = useCallback(
+    (message: string) => {
+      send({ type: 'SEND_CHAT', message, accountId: activeAccountIdRef.current });
+    },
+    [send]
+  );
 
-  const saveIni = useCallback((content: string) => {
-    send({ type: 'SAVE_INI', content });
-  }, [send]);
+  const saveIni = useCallback(
+    (content: string) => {
+      send({ type: 'SAVE_INI', content, accountId: activeAccountIdRef.current });
+    },
+    [send]
+  );
 
   const autoFixIni = useCallback(() => {
-    send({ type: 'AUTO_FIX_INI' });
+    send({ type: 'AUTO_FIX_INI', accountId: activeAccountIdRef.current });
   }, [send]);
 
   const enableSilentMode = useCallback(() => {
-    send({ type: 'ENABLE_SILENT_MODE' });
+    send({ type: 'ENABLE_SILENT_MODE', accountId: activeAccountIdRef.current });
   }, [send]);
 
-  const updateServerAccount = useCallback((
-    host: string,
-    port: number,
-    username: string,
-    password?: string,
-    accountType: string = 'mojang',
-    minecraftVersion?: string
-  ) => {
-    send({
-      type: 'UPDATE_SERVER_ACCOUNT',
-      host,
-      port,
-      username,
-      password,
-      accountType,
-    });
-  }, [send]);
+  const updateServerAccount = useCallback(
+    (
+      host: string,
+      port: number,
+      username: string,
+      password?: string,
+      accountType: string = 'mojang',
+      minecraftVersion?: string
+    ) => {
+      send({
+        type: 'UPDATE_SERVER_ACCOUNT',
+        host,
+        port,
+        username,
+        password,
+        accountType,
+        minecraftVersion,
+        accountId: activeAccountIdRef.current,
+      });
+    },
+    [send]
+  );
 
   const clearLogs = useCallback(() => {
     setLogs([]);
@@ -158,6 +247,12 @@ export function useBotWebSocket() {
 
   return {
     wsConnected,
+    accounts,
+    activeAccountId,
+    selectAccount,
+    addAccount,
+    updateAccount,
+    deleteAccount,
     mccStatus,
     logs,
     iniContent,
@@ -175,3 +270,4 @@ export function useBotWebSocket() {
     clearLogs,
   };
 }
+

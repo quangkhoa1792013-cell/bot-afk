@@ -428,23 +428,95 @@ export const MCCConfigEditor: React.FC<MCCConfigEditorProps> = ({
             </div>
 
             <div>
-              <label className="block text-[11px] font-mono text-slate-400 mb-1">Phiên Bản MC</label>
+              <label className="block text-[11px] font-mono text-slate-400 mb-1">Phiên Bản MC (Tùy chọn nếu auto lỗi)</label>
               <select
                 value={quickVersion}
                 onChange={(e) => setQuickVersion(e.target.value)}
                 className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-xs font-mono text-emerald-400 focus:outline-none focus:border-emerald-500 cursor-pointer"
               >
-                <option value="auto">auto (Khuyên Dùng)</option>
-                <option value="1.20.4">1.20.4</option>
-                <option value="1.20.2">1.20.2</option>
-                <option value="1.20.1">1.20.1</option>
-                <option value="1.19.4">1.19.4</option>
-                <option value="1.19.2">1.19.2</option>
-                <option value="1.18.2">1.18.2</option>
-                <option value="1.17.1">1.17.1</option>
-                <option value="1.16.5">1.16.5</option>
-                <option value="1.12.2">1.12.2</option>
-                <option value="1.8.9">1.8.9</option>
+                <option value="auto">auto (Mặc định tự phát hiện)</option>
+                <optgroup label="Minecraft 1.21.x (Mới nhất)">
+                  <option value="1.21.4">1.21.4</option>
+                  <option value="1.21.3">1.21.3</option>
+                  <option value="1.21.1">1.21.1</option>
+                  <option value="1.21">1.21</option>
+                </optgroup>
+                <optgroup label="Minecraft 1.20.x">
+                  <option value="1.20.6">1.20.6</option>
+                  <option value="1.20.5">1.20.5</option>
+                  <option value="1.20.4">1.20.4</option>
+                  <option value="1.20.3">1.20.3</option>
+                  <option value="1.20.2">1.20.2</option>
+                  <option value="1.20.1">1.20.1</option>
+                  <option value="1.20">1.20</option>
+                </optgroup>
+                <optgroup label="Minecraft 1.19.x">
+                  <option value="1.19.4">1.19.4</option>
+                  <option value="1.19.3">1.19.3</option>
+                  <option value="1.19.2">1.19.2</option>
+                  <option value="1.19.1">1.19.1</option>
+                  <option value="1.19">1.19</option>
+                </optgroup>
+                <optgroup label="Minecraft 1.18.x">
+                  <option value="1.18.2">1.18.2</option>
+                  <option value="1.18.1">1.18.1</option>
+                  <option value="1.18">1.18</option>
+                </optgroup>
+                <optgroup label="Minecraft 1.17.x">
+                  <option value="1.17.1">1.17.1</option>
+                  <option value="1.17">1.17</option>
+                </optgroup>
+                <optgroup label="Minecraft 1.16.x">
+                  <option value="1.16.5">1.16.5</option>
+                  <option value="1.16.4">1.16.4</option>
+                  <option value="1.16.3">1.16.3</option>
+                  <option value="1.16.2">1.16.2</option>
+                  <option value="1.16.1">1.16.1</option>
+                  <option value="1.16">1.16</option>
+                </optgroup>
+                <optgroup label="Minecraft 1.15.x">
+                  <option value="1.15.2">1.15.2</option>
+                  <option value="1.15.1">1.15.1</option>
+                  <option value="1.15">1.15</option>
+                </optgroup>
+                <optgroup label="Minecraft 1.14.x">
+                  <option value="1.14.4">1.14.4</option>
+                  <option value="1.14.3">1.14.3</option>
+                  <option value="1.14.2">1.14.2</option>
+                  <option value="1.14.1">1.14.1</option>
+                  <option value="1.14">1.14</option>
+                </optgroup>
+                <optgroup label="Minecraft 1.13.x">
+                  <option value="1.13.2">1.13.2</option>
+                  <option value="1.13.1">1.13.1</option>
+                  <option value="1.13">1.13</option>
+                </optgroup>
+                <optgroup label="Minecraft 1.12.x">
+                  <option value="1.12.2">1.12.2</option>
+                  <option value="1.12.1">1.12.1</option>
+                  <option value="1.12">1.12</option>
+                </optgroup>
+                <optgroup label="Minecraft 1.11.x & 1.10.x">
+                  <option value="1.11.2">1.11.2</option>
+                  <option value="1.11">1.11</option>
+                  <option value="1.10.2">1.10.2</option>
+                  <option value="1.10">1.10</option>
+                </optgroup>
+                <optgroup label="Minecraft 1.9.x">
+                  <option value="1.9.4">1.9.4</option>
+                  <option value="1.9.2">1.9.2</option>
+                  <option value="1.9">1.9</option>
+                </optgroup>
+                <optgroup label="Minecraft 1.8.x & Cũ hơn">
+                  <option value="1.8.9">1.8.9</option>
+                  <option value="1.8.8">1.8.8</option>
+                  <option value="1.8">1.8</option>
+                  <option value="1.7.10">1.7.10</option>
+                  <option value="1.7.2">1.7.2</option>
+                  <option value="1.6.4">1.6.4</option>
+                  <option value="1.5.2">1.5.2</option>
+                  <option value="1.4.6">1.4.6</option>
+                </optgroup>
               </select>
             </div>
 

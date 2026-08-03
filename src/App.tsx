@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useBotWebSocket } from './hooks/useBotWebSocket';
 import { MCCHeader } from './components/MCCHeader';
+import { MCCAccountSelector } from './components/MCCAccountSelector';
 import { MCCTerminal } from './components/MCCTerminal';
 import { MCCMinimapRadar } from './components/MCCMinimapRadar';
 import { MCCMovementPanel } from './components/MCCMovementPanel';
@@ -12,6 +13,11 @@ import { Terminal, Sliders, BookOpen, Server, Navigation, Compass, Map, ShieldAl
 export default function App() {
   const {
     wsConnected,
+    accounts,
+    activeAccountId,
+    selectAccount,
+    addAccount,
+    deleteAccount,
     mccStatus,
     logs,
     iniContent,
@@ -80,6 +86,17 @@ export default function App() {
         onStart={startMCC}
         onStop={stopMCC}
         onRestart={restartMCC}
+      />
+
+      {/* Account Selector Bar */}
+      <MCCAccountSelector
+        accounts={accounts}
+        activeAccountId={activeAccountId}
+        onSelectAccount={selectAccount}
+        onAddAccount={addAccount}
+        onDeleteAccount={deleteAccount}
+        onStartMCC={startMCC}
+        onStopMCC={stopMCC}
       />
 
       {/* Main Container */}
