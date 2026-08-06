@@ -1,0 +1,13 @@
+[
+  {
+    "id": "acc-default",
+    "name": "Tài Khoản Mặc Định",
+    "username": "geasf",
+    "password": "-",
+    "accountType": "mojang",
+    "serverHost": "york-mark.gl.joinmc.link",
+    "serverPort": 25565,
+    "minecraftVersion": "auto",
+    "isDefault": true
+  }
+]

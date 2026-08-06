@@ -42,7 +42,7 @@ const BASE_MAP_PALETTE: Array<[number, number, number]> = [
 ];
 
 // Helper to convert color index to RGBA
-function getMinecraftMapColor(colorId: number): [number, number, number, number] {
+export function getMinecraftMapColor(colorId: number): [number, number, number, number] {
   const baseId = Math.floor(colorId / 4);
   const shade = colorId % 4;
 

@@ -12,16 +12,17 @@ import {
 export function useBotWebSocket() {
   const [wsConnected, setWsConnected] = useState(false);
   const [accounts, setAccounts] = useState<AccountSummary[]>([]);
-  const [activeAccountId, setActiveAccountId] = useState<string>('acc-default');
-  const activeAccountIdRef = useRef<string>('acc-default');
+  const [activeAccountId, setActiveAccountId] = useState<string>('');
+  const activeAccountIdRef = useRef<string>('');
+  const [scripts, setScripts] = useState<string[]>([]);
 
   const [mccStatus, setMccStatus] = useState<MCCProcessStatus>({
     running: false,
     pid: null,
     uptimeSeconds: 0,
-    serverHost: 'aquamc.vn',
+    serverHost: '-',
     serverPort: 25565,
-    username: 'geasf',
+    username: '-',
     accountType: 'mojang',
     minecraftVersion: 'auto',
   });
@@ -30,6 +31,7 @@ export function useBotWebSocket() {
   const [iniContent, setIniContent] = useState<string>('');
   const [parsedIni, setParsedIni] = useState<Record<string, any>>({});
   const [playerPosition, setPlayerPosition] = useState<PlayerPosition | null>(null);
+  const [autoRelog, setAutoRelogState] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
 
@@ -43,6 +45,16 @@ export function useBotWebSocket() {
     let reconnectTimeout: NodeJS.Timeout | null = null;
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}`;
+
+    // Fetch available login scripts for bot creation
+    fetch('/api/scripts')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && Array.isArray(data.scripts) && isComponentMounted) {
+          setScripts(data.scripts);
+        }
+      })
+      .catch(() => {});
 
     function connectWs() {
       if (!isComponentMounted) return;
@@ -73,6 +85,7 @@ export function useBotWebSocket() {
             case 'MCC_STATUS':
               if (!message.accountId || message.accountId === activeAccountIdRef.current) {
                 setMccStatus(message.status);
+                if (typeof message.status.autoRelog === 'boolean') setAutoRelogState(message.status.autoRelog);
               }
               // Update running state in accounts summary list
               if (message.accountId) {
@@ -218,6 +231,13 @@ export function useBotWebSocket() {
     send({ type: 'ENABLE_SILENT_MODE', accountId: activeAccountIdRef.current });
   }, [send]);
 
+  const setAutoRelog = useCallback(
+    (enabled: boolean) => {
+      send({ type: 'SET_AUTORELOG', enabled, accountId: activeAccountIdRef.current });
+    },
+    [send]
+  );
+
   const updateServerAccount = useCallback(
     (
       host: string,
@@ -249,6 +269,7 @@ export function useBotWebSocket() {
     wsConnected,
     accounts,
     activeAccountId,
+    scripts,
     selectAccount,
     addAccount,
     updateAccount,
@@ -266,6 +287,8 @@ export function useBotWebSocket() {
     saveIni,
     autoFixIni,
     enableSilentMode,
+    setAutoRelog,
+    autoRelog,
     updateServerAccount,
     clearLogs,
   };

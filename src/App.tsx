@@ -15,6 +15,7 @@ export default function App() {
     wsConnected,
     accounts,
     activeAccountId,
+    scripts,
     selectAccount,
     addAccount,
     deleteAccount,
@@ -29,6 +30,8 @@ export default function App() {
     sendCommand,
     saveIni,
     autoFixIni,
+    setAutoRelog,
+    autoRelog,
     updateServerAccount,
     clearLogs,
   } = useBotWebSocket();
@@ -83,15 +86,19 @@ export default function App() {
       <MCCHeader
         status={mccStatus}
         wsConnected={wsConnected}
+        hasBot={accounts.length > 0}
+        autoRelog={autoRelog}
         onStart={startMCC}
         onStop={stopMCC}
         onRestart={restartMCC}
+        onToggleAutoRelog={setAutoRelog}
       />
 
       {/* Account Selector Bar */}
       <MCCAccountSelector
         accounts={accounts}
         activeAccountId={activeAccountId}
+        scripts={scripts}
         onSelectAccount={selectAccount}
         onAddAccount={addAccount}
         onDeleteAccount={deleteAccount}

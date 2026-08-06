@@ -24,9 +24,13 @@ import {
   ChevronDown,
   ChevronRight,
   Layers,
-  Sparkles
+  Sparkles,
+  EyeOff,
+  BookmarkPlus,
+  Trash2
 } from 'lucide-react';
 import { MCCProcessStatus } from '../types';
+import { MC_VERSIONS } from '../lib/mcVersions';
 import {
   parseIniToSections,
   serializeSectionsToIni,
@@ -34,6 +38,13 @@ import {
   INISection,
   INISetting,
 } from '../lib/iniHelper';
+import {
+  loadSavedAccounts,
+  saveSavedAccount,
+  deleteSavedAccount,
+  resolveAccountCredentials,
+  SavedAccount,
+} from '../lib/savedAccounts';
 
 interface CategoryInfo {
   label: string;
@@ -86,14 +97,15 @@ export const MCCConfigEditor: React.FC<MCCConfigEditorProps> = ({
   const [quickPort, setQuickPort] = useState(mccStatus.serverPort || 25565);
   const [quickUser, setQuickUser] = useState(mccStatus.username || 'geasf');
   const [quickPass, setQuickPass] = useState('');
-  const [quickType, setQuickType] = useState(mccStatus.accountType || 'mojang');
+  const [quickType, setQuickType] = useState('offline');
   const [quickVersion, setQuickVersion] = useState(mccStatus.minecraftVersion || 'auto');
+  const [showQuickPass, setShowQuickPass] = useState(false);
+  const [savedAccounts, setSavedAccounts] = useState<SavedAccount[]>(() => loadSavedAccounts());
 
   useEffect(() => {
     if (mccStatus.serverHost) setQuickHost(mccStatus.serverHost);
     if (mccStatus.serverPort) setQuickPort(mccStatus.serverPort);
     if (mccStatus.username) setQuickUser(mccStatus.username);
-    if (mccStatus.accountType) setQuickType(mccStatus.accountType);
     if (mccStatus.minecraftVersion) setQuickVersion(mccStatus.minecraftVersion);
   }, [mccStatus]);
 
@@ -197,10 +209,35 @@ export const MCCConfigEditor: React.FC<MCCConfigEditorProps> = ({
     const portNum = Number(quickPort);
     const validPort = !isNaN(portNum) && portNum >= 0 && portNum <= 65535 ? portNum : 25565;
     if (validPort !== quickPort) setQuickPort(validPort);
-    onUpdateServerAccount(quickHost, validPort, quickUser, quickPass, quickType, quickVersion);
-    setSaveMessage(`Đã cập nhật kết nối server: ${quickHost}:${validPort} (${quickUser}) [MC ${quickVersion}]`);
+    const creds = resolveAccountCredentials(quickType, quickPass);
+    onUpdateServerAccount(quickHost, validPort, quickUser, creds.password, creds.accountType, quickVersion);
+    setSaveMessage(`Đã cập nhật kết nối server: ${quickHost}:${validPort} (${quickUser}) [${quickType === 'offline' ? 'Offline' : quickType}] [MC ${quickVersion}]`);
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 3500);
+  };
+
+  const handleSaveQuickToVault = () => {
+    if (!quickUser.trim()) return;
+    const creds = resolveAccountCredentials(quickType, quickPass);
+    setSavedAccounts(
+      saveSavedAccount({
+        username: quickUser.trim(),
+        password: creds.password,
+        accountType: quickType as SavedAccount['accountType'],
+      })
+    );
+    setSaveMessage(`Đã lưu acc "${quickUser}" vào bộ nhớ - lần sau chỉ cần chọn để điền nhanh.`);
+    setSaveSuccess(true);
+    setTimeout(() => setSaveSuccess(false), 3500);
+  };
+
+  const applySavedQuickAccount = (acc: SavedAccount) => {
+    setQuickUser(acc.username);
+    setQuickPass(acc.accountType === 'offline' ? '-' : acc.password);
+    setQuickType(acc.accountType);
+    setSaveMessage(`Đã điền nhanh acc "${acc.username}" từ bộ nhớ.`);
+    setSaveSuccess(true);
+    setTimeout(() => setSaveSuccess(false), 2500);
   };
 
   // Categories list with counts
@@ -372,8 +409,40 @@ export const MCCConfigEditor: React.FC<MCCConfigEditorProps> = ({
           {/* Quick Connection Bar */}
           <form
             onSubmit={handleApplyQuickAccount}
-            className="bg-slate-950/90 border-b border-slate-800 px-5 py-3 grid grid-cols-1 md:grid-cols-7 gap-3 items-end"
+            className="bg-slate-950/90 border-b border-slate-800 px-5 py-3 grid grid-cols-1 md:grid-cols-8 gap-3 items-end"
           >
+            {savedAccounts.length > 0 && (
+              <div className="md:col-span-8 -mb-1">
+                <label className="block text-[11px] font-mono text-amber-400/90 mb-1 flex items-center gap-1">
+                  <BookmarkPlus className="w-3 h-3 text-amber-400" /> Acc Đã Lưu - chọn để điền nhanh (không cần nhập lại):
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {savedAccounts.map((acc) => (
+                    <span
+                      key={acc.id}
+                      onClick={() => applySavedQuickAccount(acc)}
+                      title={`${acc.username} (${acc.accountType === 'offline' ? 'Offline' : acc.accountType})`}
+                      className="group inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 hover:border-emerald-500 text-[11px] text-slate-200 font-mono cursor-pointer transition-all"
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${acc.accountType === 'offline' ? 'bg-emerald-400' : 'bg-indigo-400'}`} />
+                      {acc.username}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSavedAccounts(deleteSavedAccount(acc.id));
+                        }}
+                        className="text-slate-500 hover:text-rose-400 transition-colors"
+                        title="Xóa acc đã lưu"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="md:col-span-2">
               <label className="block text-[11px] font-mono text-slate-400 mb-1 flex items-center gap-1">
                 <Server className="w-3 h-3 text-emerald-400" /> Host IP / Tên Miền Server
@@ -404,7 +473,7 @@ export const MCCConfigEditor: React.FC<MCCConfigEditorProps> = ({
             </div>
 
             <div>
-              <label className="block text-[11px] font-mono text-slate-400 mb-1">Tài Khoản / Email</label>
+              <label className="block text-[11px] font-mono text-slate-400 mb-1">Tên Acc / Username</label>
               <input
                 type="text"
                 value={quickUser}
@@ -415,13 +484,42 @@ export const MCCConfigEditor: React.FC<MCCConfigEditorProps> = ({
             </div>
 
             <div>
+              <label className="block text-[11px] font-mono text-slate-400 mb-1">Mật Khẩu</label>
+              <div className="relative">
+                <input
+                  type={showQuickPass ? 'text' : 'password'}
+                  disabled={quickType === 'offline'}
+                  value={quickPass}
+                  onChange={(e) => setQuickPass(e.target.value)}
+                  placeholder={quickType === 'offline' ? 'Offline - tự dùng "-"' : 'Mật khẩu acc'}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 pr-8 text-xs text-slate-200 font-mono focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+                />
+                {quickType !== 'offline' && (
+                  <button
+                    type="button"
+                    onClick={() => setShowQuickPass((v) => !v)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-200 transition-colors"
+                    title={showQuickPass ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                  >
+                    {showQuickPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div>
               <label className="block text-[11px] font-mono text-slate-400 mb-1">Loại Account</label>
               <select
                 value={quickType}
-                onChange={(e) => setQuickType(e.target.value)}
+                onChange={(e) => {
+                  const t = e.target.value;
+                  setQuickType(t);
+                  setQuickPass(t === 'offline' ? '-' : quickPass === '-' ? '' : quickPass);
+                }}
                 className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 font-mono focus:outline-none focus:border-emerald-500 cursor-pointer"
               >
-                <option value="mojang">Mojang / Offline</option>
+                <option value="offline">Offline Mode (tự động "-")</option>
+                <option value="mojang">Mojang / Premium (có pass)</option>
                 <option value="microsoft">Microsoft OAuth</option>
                 <option value="yggdrasil">Yggdrasil Custom</option>
               </select>
@@ -435,98 +533,34 @@ export const MCCConfigEditor: React.FC<MCCConfigEditorProps> = ({
                 className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-xs font-mono text-emerald-400 focus:outline-none focus:border-emerald-500 cursor-pointer"
               >
                 <option value="auto">auto (Mặc định tự phát hiện)</option>
-                <optgroup label="Minecraft 1.21.x (Mới nhất)">
-                  <option value="1.21.4">1.21.4</option>
-                  <option value="1.21.3">1.21.3</option>
-                  <option value="1.21.1">1.21.1</option>
-                  <option value="1.21">1.21</option>
-                </optgroup>
-                <optgroup label="Minecraft 1.20.x">
-                  <option value="1.20.6">1.20.6</option>
-                  <option value="1.20.5">1.20.5</option>
-                  <option value="1.20.4">1.20.4</option>
-                  <option value="1.20.3">1.20.3</option>
-                  <option value="1.20.2">1.20.2</option>
-                  <option value="1.20.1">1.20.1</option>
-                  <option value="1.20">1.20</option>
-                </optgroup>
-                <optgroup label="Minecraft 1.19.x">
-                  <option value="1.19.4">1.19.4</option>
-                  <option value="1.19.3">1.19.3</option>
-                  <option value="1.19.2">1.19.2</option>
-                  <option value="1.19.1">1.19.1</option>
-                  <option value="1.19">1.19</option>
-                </optgroup>
-                <optgroup label="Minecraft 1.18.x">
-                  <option value="1.18.2">1.18.2</option>
-                  <option value="1.18.1">1.18.1</option>
-                  <option value="1.18">1.18</option>
-                </optgroup>
-                <optgroup label="Minecraft 1.17.x">
-                  <option value="1.17.1">1.17.1</option>
-                  <option value="1.17">1.17</option>
-                </optgroup>
-                <optgroup label="Minecraft 1.16.x">
-                  <option value="1.16.5">1.16.5</option>
-                  <option value="1.16.4">1.16.4</option>
-                  <option value="1.16.3">1.16.3</option>
-                  <option value="1.16.2">1.16.2</option>
-                  <option value="1.16.1">1.16.1</option>
-                  <option value="1.16">1.16</option>
-                </optgroup>
-                <optgroup label="Minecraft 1.15.x">
-                  <option value="1.15.2">1.15.2</option>
-                  <option value="1.15.1">1.15.1</option>
-                  <option value="1.15">1.15</option>
-                </optgroup>
-                <optgroup label="Minecraft 1.14.x">
-                  <option value="1.14.4">1.14.4</option>
-                  <option value="1.14.3">1.14.3</option>
-                  <option value="1.14.2">1.14.2</option>
-                  <option value="1.14.1">1.14.1</option>
-                  <option value="1.14">1.14</option>
-                </optgroup>
-                <optgroup label="Minecraft 1.13.x">
-                  <option value="1.13.2">1.13.2</option>
-                  <option value="1.13.1">1.13.1</option>
-                  <option value="1.13">1.13</option>
-                </optgroup>
-                <optgroup label="Minecraft 1.12.x">
-                  <option value="1.12.2">1.12.2</option>
-                  <option value="1.12.1">1.12.1</option>
-                  <option value="1.12">1.12</option>
-                </optgroup>
-                <optgroup label="Minecraft 1.11.x & 1.10.x">
-                  <option value="1.11.2">1.11.2</option>
-                  <option value="1.11">1.11</option>
-                  <option value="1.10.2">1.10.2</option>
-                  <option value="1.10">1.10</option>
-                </optgroup>
-                <optgroup label="Minecraft 1.9.x">
-                  <option value="1.9.4">1.9.4</option>
-                  <option value="1.9.2">1.9.2</option>
-                  <option value="1.9">1.9</option>
-                </optgroup>
-                <optgroup label="Minecraft 1.8.x & Cũ hơn">
-                  <option value="1.8.9">1.8.9</option>
-                  <option value="1.8.8">1.8.8</option>
-                  <option value="1.8">1.8</option>
-                  <option value="1.7.10">1.7.10</option>
-                  <option value="1.7.2">1.7.2</option>
-                  <option value="1.6.4">1.6.4</option>
-                  <option value="1.5.2">1.5.2</option>
-                  <option value="1.4.6">1.4.6</option>
-                </optgroup>
+                <option value="1.21.11">1.21.11 (khuyến nghị cho aquamc)</option>
+                <option disabled>──────────</option>
+                {MC_VERSIONS.map((v) => (
+                  <option key={v} value={v}>
+                    {v}
+                  </option>
+                ))}
               </select>
             </div>
 
             <div>
-              <button
-                type="submit"
-                className="w-full py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold cursor-pointer transition-colors shadow"
-              >
-                Cập Nhật Kết Nối
-              </button>
+              <label className="block text-[11px] font-mono text-slate-400 mb-1">&nbsp;</label>
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  className="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold cursor-pointer transition-colors shadow"
+                >
+                  Cập Nhật
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveQuickToVault}
+                  title="Lưu acc này vào bộ nhớ để lần sau điền nhanh"
+                  className="py-1.5 px-2.5 bg-amber-600/20 hover:bg-amber-600/40 border border-amber-500/40 text-amber-300 rounded-lg text-xs font-semibold cursor-pointer transition-colors"
+                >
+                  <BookmarkPlus className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
           </form>
 

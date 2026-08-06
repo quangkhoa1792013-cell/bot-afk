@@ -300,6 +300,16 @@ export function fixAndSanitizeIniContent(rawIni: string): INIRepairResult {
   let fixCount = 0;
   const logs: string[] = [];
 
+  /** Escape unescaped backslashes inside a quoted value so MCC's ini parser never breaks
+      (fixes "Found an invalid escape sequence '\\.'" errors from pasted Windows paths etc.) */
+  const escapeBackslashes = (quoted: string): string => {
+    if (!quoted.includes('\\')) return quoted;
+    const quoteChar = quoted[0];
+    const inner = quoted.slice(1, -1);
+    const escaped = inner.replace(/\\(?!\\)/g, '\\\\');
+    return quoteChar + escaped + quoteChar;
+  };
+
   for (let i = 0; i < lines.length; i++) {
     let line = lines[i];
     const trimmed = line.trim();
@@ -370,6 +380,15 @@ export function fixAndSanitizeIniContent(rawIni: string): INIRepairResult {
             ) {
               pVal = `"${pVal}"`;
               innerModified = true;
+            }
+
+            // Escape unescaped backslashes in quoted values (fixes "\\. invalid escape sequence")
+            if (pVal.startsWith('"') && pVal.includes('\\')) {
+              const safeVal = escapeBackslashes(pVal);
+              if (safeVal !== pVal) {
+                pVal = safeVal;
+                innerModified = true;
+              }
             }
             return `${pKey} = ${pVal}`;
           }
@@ -448,6 +467,16 @@ export function fixAndSanitizeIniContent(rawIni: string): INIRepairResult {
           line = `${indent}${key} = ${newVal}${comment}`;
           fixCount++;
           logs.push(`Dòng ${i + 1}: Thêm dấu ngoặc kép cho ${key} = ${newVal}`);
+        }
+      }
+
+      // Escape unescaped backslashes inside already-quoted values (fixes "\\. invalid escape sequence")
+      if (val.startsWith('"') && val.endsWith('"') && val.includes('\\')) {
+        const safeVal = escapeBackslashes(val);
+        if (safeVal !== val) {
+          line = `${indent}${key} = ${safeVal}${comment}`;
+          fixCount++;
+          logs.push(`Dòng ${i + 1}: Escape dấu gạch chéo ngược trong ${key} -> ${safeVal}`);
         }
       }
     }

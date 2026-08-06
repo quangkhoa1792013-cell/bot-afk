@@ -5,4 +5,11 @@ coverage/
 .DS_Store
 *.log
 .env*
+*.log
+log/
+logs/
+*.logs
 !.env.example
+libs/
+lib/
+libraries/

@@ -68,6 +68,29 @@ async function startServer() {
     res.status(400).json({ success: false, error: 'Missing code or colors parameter' });
   });
 
+  // API to list available login scripts in scripts/
+  app.get('/api/scripts', async (req, res) => {
+    try {
+      const scriptsDir = path.join(process.cwd(), 'scripts');
+      const fs = await import('fs');
+      const scripts: { name: string; content: string }[] = [];
+      if (fs.existsSync(scriptsDir)) {
+        const files = fs.readdirSync(scriptsDir).filter((f) => f.endsWith('.txt'));
+        for (const file of files) {
+          try {
+            const content = fs.readFileSync(path.join(scriptsDir, file), 'utf-8');
+            scripts.push({ name: file, content });
+          } catch {
+            // skip unreadable
+          }
+        }
+      }
+      res.json({ success: true, scripts });
+    } catch (err) {
+      res.json({ success: false, scripts: [], error: String(err) });
+    }
+  });
+
   // API to fetch free public SOCKS5 proxies
   app.get('/api/proxies', async (req, res) => {
     try {

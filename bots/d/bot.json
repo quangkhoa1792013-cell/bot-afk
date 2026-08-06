@@ -1,0 +1,11 @@
+{
+  "name": "d",
+  "username": "khoablabla",
+  "password": "-",
+  "accountType": "mojang",
+  "serverHost": "aquamc.vn",
+  "serverPort": 25565,
+  "minecraftVersion": "1.21.11",
+  "script": "login_khoablabla.txt",
+  "id": "d"
+}

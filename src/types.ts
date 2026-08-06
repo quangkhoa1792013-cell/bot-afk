@@ -8,6 +8,7 @@ export interface AccountProfile {
   serverPort: number;
   minecraftVersion: string;
   method?: string;
+  script?: string;
   isDefault?: boolean;
 }
 
@@ -21,6 +22,7 @@ export interface AccountSummary {
   running: boolean;
   pid: number | null;
   uptimeSeconds: number;
+  autoRelog?: boolean;
 }
 
 export interface MCCProcessStatus {
@@ -35,6 +37,7 @@ export interface MCCProcessStatus {
   minecraftVersion: string;
   lastLog?: string;
   error?: string | null;
+  autoRelog?: boolean;
 }
 
 export interface PlayerPosition {
@@ -71,6 +74,7 @@ export type WSMessageFromClient =
   | { type: 'UPDATE_SERVER_ACCOUNT'; host: string; port?: number; username: string; password?: string; accountType?: string; method?: string; minecraftVersion?: string; accountId?: string }
   | { type: 'UPDATE_BOT_SETTING'; section: string; key: string; value: any; accountId?: string }
   | { type: 'ENABLE_SILENT_MODE'; accountId?: string }
+  | { type: 'SET_AUTORELOG'; enabled: boolean; accountId?: string }
   | { type: 'AUTO_FIX_INI'; accountId?: string };
 
 export type WSMessageFromServer =
