@@ -1,7 +1,7 @@
 import express from 'express';
 import path from 'path';
 import http from 'http';
-import { WebSocketServer } from 'ws';
+import { WebSocketServer, WebSocket } from 'ws';
 import { createServer as createViteServer } from 'vite';
 import { mccManager } from './src/server/mccManager.js';
 import {
@@ -11,39 +11,77 @@ import {
   updateCurrentCaptchaPngBuffer,
 } from './src/server/mapRenderer.js';
 
+// Optional shared secret. When AUTH_TOKEN is set, REST + WS requests must carry it via
+// `Authorization: Bearer <token>` header or `?token=<token>` query param.
+const AUTH_TOKEN = process.env.AUTH_TOKEN || '';
+
+function bearerToken(req: express.Request): string {
+  const header = (req.headers.authorization || '');
+  if (header.startsWith('Bearer ')) return header.slice(7).trim();
+  const q = typeof req.query?.token === 'string' ? req.query.token : '';
+  return q;
+}
+
+function wsToken(req: http.IncomingMessage): string {
+  try {
+    const url = new URL(req.url || '/', 'http://localhost');
+    return url.searchParams.get('token') || '';
+  } catch {
+    return '';
+  }
+}
+
+function requireAuth(req: express.Request, res: express.Response): boolean {
+  if (!AUTH_TOKEN) return true;
+  if (bearerToken(req) === AUTH_TOKEN) return true;
+  res.status(401).json({ success: false, error: 'Missing or invalid AUTH_TOKEN' });
+  return false;
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
   app.use(express.json());
 
+  // Wait for accounts + bot configs to load before accepting clients
+  await mccManager.ready();
+
   app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', time: new Date().toISOString() });
+    res.json({ status: 'ok', time: new Date().toISOString(), authRequired: !!AUTH_TOKEN });
   });
 
   // REST endpoints for MCC INI
   app.get('/api/mcc/ini', async (req, res) => {
-    const content = await mccManager.getIniContent();
+    if (!requireAuth(req, res)) return;
+    const accountId = typeof req.query.accountId === 'string' ? req.query.accountId : undefined;
+    const content = await mccManager.getIniContent(accountId);
     res.json({ success: true, content });
   });
 
   app.post('/api/mcc/ini', async (req, res) => {
-    const { content } = req.body;
+    if (!requireAuth(req, res)) return;
+    const { content, accountId } = req.body;
     if (typeof content !== 'string') {
       return res.status(400).json({ success: false, error: 'Content must be string' });
     }
-    const success = await mccManager.saveIniContent(content);
+    // MCC rewrites bot.ini from memory on exit, so stop the process first,
+    // then save, then restart - otherwise the editor changes get clobbered.
+    const success = await mccManager.stopThenSaveIniAndRestart(accountId || undefined, content);
     res.json({ success });
   });
 
-  // Anti-Kick Silent Mode Endpoint
+  // Anti-Kick Silent Mode Endpoint (targets the account chosen by the client)
   app.post('/api/mcc/silent-mode', async (req, res) => {
-    const success = await mccManager.enableSilentMode();
+    if (!requireAuth(req, res)) return;
+    const accountId = typeof req.body?.accountId === 'string' ? req.body.accountId : typeof req.query.accountId === 'string' ? req.query.accountId : undefined;
+    const success = await mccManager.enableSilentMode(accountId);
     res.json({ success, message: 'Chế độ Im Lặng Anti-Kick đã được kích hoạt!' });
   });
 
   // Map Captcha PNG Image Endpoint (Serves /captcha.png and /api/captcha-image)
   const serveCaptchaImage = (req: express.Request, res: express.Response) => {
+    if (!requireAuth(req, res)) return;
     const pngBuf = getCurrentCaptchaPngBuffer();
     res.setHeader('Content-Type', 'image/png');
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
@@ -55,6 +93,7 @@ async function startServer() {
 
   // Endpoint to generate or update Map Captcha image
   app.post('/api/captcha-image', (req, res) => {
+    if (!requireAuth(req, res)) return;
     const { code, colors } = req.body;
     if (Array.isArray(colors)) {
       const buf = renderMapPaletteToPngBuffer(colors);
@@ -70,6 +109,7 @@ async function startServer() {
 
   // API to list available login scripts in scripts/
   app.get('/api/scripts', async (req, res) => {
+    if (!requireAuth(req, res)) return;
     try {
       const scriptsDir = path.join(process.cwd(), 'scripts');
       const fs = await import('fs');
@@ -93,6 +133,7 @@ async function startServer() {
 
   // API to fetch free public SOCKS5 proxies
   app.get('/api/proxies', async (req, res) => {
+    if (!requireAuth(req, res)) return;
     try {
       const response = await fetch(
         'https://api.proxyscrape.com/v2/?request=displayproxies&protocol=socks5&timeout=3000&country=all&ssl=all&anonymity=all',
@@ -132,7 +173,12 @@ async function startServer() {
   const server = http.createServer(app);
   const wss = new WebSocketServer({ server });
 
-  wss.on('connection', (ws) => {
+  wss.on('connection', (ws: WebSocket, req) => {
+    if (AUTH_TOKEN && wsToken(req) !== AUTH_TOKEN) {
+      ws.close(4001, 'unauthorized');
+      return;
+    }
+
     mccManager.addClient(ws);
 
     ws.on('message', (data) => {
@@ -166,4 +212,3 @@ async function startServer() {
 }
 
 startServer();
-

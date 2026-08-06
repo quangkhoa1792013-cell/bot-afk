@@ -8,13 +8,19 @@ import {
   AccountSummary,
   AccountProfile,
 } from '../types';
+import { getAuthToken, setAuthToken, authQueryString, authHeaders } from '../lib/auth';
+
+export interface LoginScriptInfo {
+  name: string;
+  content: string;
+}
 
 export function useBotWebSocket() {
   const [wsConnected, setWsConnected] = useState(false);
   const [accounts, setAccounts] = useState<AccountSummary[]>([]);
   const [activeAccountId, setActiveAccountId] = useState<string>('');
   const activeAccountIdRef = useRef<string>('');
-  const [scripts, setScripts] = useState<string[]>([]);
+  const [scripts, setScripts] = useState<LoginScriptInfo[]>([]);
 
   const [mccStatus, setMccStatus] = useState<MCCProcessStatus>({
     running: false,
@@ -47,7 +53,7 @@ export function useBotWebSocket() {
     const wsUrl = `${protocol}//${window.location.host}`;
 
     // Fetch available login scripts for bot creation
-    fetch('/api/scripts')
+    fetch('/api/scripts', { headers: authHeaders() })
       .then((res) => res.json())
       .then((data) => {
         if (data && Array.isArray(data.scripts) && isComponentMounted) {
@@ -56,10 +62,26 @@ export function useBotWebSocket() {
       })
       .catch(() => {});
 
+    // Check whether the server requires an AUTH_TOKEN; if so ask the user once
+    // and remember it before opening the WebSocket.
+    function ensureAuthReady(cb: () => void) {
+      fetch('/api/health')
+        .then((res) => res.json())
+        .then((data) => {
+          if (isComponentMounted && data && data.authRequired && !getAuthToken()) {
+            const token = window.prompt('Server yêu cầu AUTH_TOKEN. Nhập token để tiếp tục:');
+            if (token) setAuthToken(token.trim());
+            else setAuthToken('');
+          }
+          cb();
+        })
+        .catch(() => cb());
+    }
+
     function connectWs() {
       if (!isComponentMounted) return;
 
-      const socket = new WebSocket(wsUrl);
+      const socket = new WebSocket(wsUrl + authQueryString());
       wsRef.current = socket;
 
       socket.onopen = () => {
@@ -140,7 +162,9 @@ export function useBotWebSocket() {
       };
     }
 
-    connectWs();
+    ensureAuthReady(() => {
+      if (isComponentMounted) connectWs();
+    });
 
     return () => {
       isComponentMounted = false;

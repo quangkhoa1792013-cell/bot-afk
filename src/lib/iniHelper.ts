@@ -14,6 +14,10 @@ export interface INISection {
   categoryLabel: string;
   description?: string;
   settings: INISetting[];
+  /** Leading comment lines found before the first section header (preserved on serialize) */
+  topComments?: string[];
+  /** True when the section header was nested e.g. [[ChatBot.AutoCraft.Recipes]] */
+  isNested?: boolean;
 }
 
 // Map section name to friendly category
@@ -103,6 +107,7 @@ export function parseIniToSections(rawIni: string): INISection[] {
   const sections: INISection[] = [];
   let currentSection: INISection | null = null;
   let accumulatedComment = '';
+  const headerComments: string[] = [];
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
@@ -115,9 +120,13 @@ export function parseIniToSections(rawIni: string): INISection[] {
 
     // Comment line
     if (line.startsWith('#') || line.startsWith(';')) {
-      const commentText = line.replace(/^[#;]\s*/, '').trim();
-      if (!commentText.startsWith('===') && !commentText.startsWith('---')) {
-        accumulatedComment = accumulatedComment ? `${accumulatedComment} ${commentText}` : commentText;
+      if (sections.length === 0 && !currentSection) {
+        headerComments.push(line);
+      } else {
+        const commentText = line.replace(/^[#;]\s*/, '').trim();
+        if (!commentText.startsWith('===') && !commentText.startsWith('---')) {
+          accumulatedComment = accumulatedComment ? `${accumulatedComment} ${commentText}` : commentText;
+        }
       }
       continue;
     }
@@ -126,6 +135,7 @@ export function parseIniToSections(rawIni: string): INISection[] {
     const sectionMatch = line.match(/^\[{1,2}([^\]]+)\]{1,2}$/);
     if (sectionMatch) {
       const sectionName = sectionMatch[1].trim();
+      const isNested = line.trim().startsWith('[[');
       const { category, categoryLabel } = getSectionCategory(sectionName);
 
       currentSection = {
@@ -135,6 +145,8 @@ export function parseIniToSections(rawIni: string): INISection[] {
         categoryLabel,
         description: accumulatedComment || undefined,
         settings: [],
+        topComments: sections.length === 0 && headerComments.length > 0 ? [...headerComments] : undefined,
+        isNested,
       };
       sections.push(currentSection);
       accumulatedComment = '';
@@ -232,15 +244,25 @@ export function parseIniToSections(rawIni: string): INISection[] {
 
 // Serialize structured sections back to raw INI text
 export function serializeSectionsToIni(sections: INISection[], originalRawIni?: string): string {
+  /** Quote a string value for the INI parser, escaping backslashes and quotes
+      so values like regexes ("\.$") never break MCC's parser */
+  const quote = (s: string) => `"${String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+
   // If we have sections, build a clean INI text
   const outputLines: string[] = [];
-  outputLines.push('# Startup Config File (Generated & Updated by MCC Web Engine)');
-  outputLines.push('# Documentation: https://mccteam.github.io/g/conf.html\n');
+  const firstSection = sections[0];
+  if (firstSection?.topComments && firstSection.topComments.length > 0) {
+    outputLines.push(...firstSection.topComments);
+    outputLines.push('');
+  } else {
+    outputLines.push('# Startup Config File (Generated & Updated by MCC Web Engine)');
+    outputLines.push('# Documentation: https://mccteam.github.io/g/conf.html\n');
+  }
 
   for (const sec of sections) {
     if (sec.settings.length === 0 && !sec.description) continue;
 
-    outputLines.push(`[${sec.name}]`);
+    outputLines.push(`${sec.isNested ? '[[' : '['}${sec.name}${sec.isNested ? ']]' : ']'}`);
 
     for (const setting of sec.settings) {
       let valStr = '';
@@ -251,7 +273,7 @@ export function serializeSectionsToIni(sections: INISection[], originalRawIni?: 
         valStr = String(setting.value);
       } else if (setting.type === 'array') {
         if (Array.isArray(setting.value)) {
-          valStr = `[ ${setting.value.map((v) => `"${v}"`).join(', ')} ]`;
+          valStr = `[ ${setting.value.map((v) => quote(String(v))).join(', ')} ]`;
         } else {
           valStr = String(setting.value);
         }
@@ -264,7 +286,7 @@ export function serializeSectionsToIni(sections: INISection[], originalRawIni?: 
         if (strVal.startsWith('{') || strVal.startsWith('[')) {
           valStr = strVal;
         } else {
-          valStr = `"${strVal}"`;
+          valStr = quote(strVal);
         }
       }
 
@@ -301,12 +323,26 @@ export function fixAndSanitizeIniContent(rawIni: string): INIRepairResult {
   const logs: string[] = [];
 
   /** Escape unescaped backslashes inside a quoted value so MCC's ini parser never breaks
-      (fixes "Found an invalid escape sequence '\\.'" errors from pasted Windows paths etc.) */
+      (fixes "Found an invalid escape sequence '\\.'" errors from pasted Windows paths etc.).
+      Already-escaped pairs ("\\") are left untouched so the fixer never double-escapes. */
   const escapeBackslashes = (quoted: string): string => {
     if (!quoted.includes('\\')) return quoted;
     const quoteChar = quoted[0];
     const inner = quoted.slice(1, -1);
-    const escaped = inner.replace(/\\(?!\\)/g, '\\\\');
+    let escaped = '';
+    for (let i = 0; i < inner.length; i++) {
+      const c = inner[i];
+      if (c === '\\') {
+        if (inner[i + 1] === '\\') {
+          escaped += '\\\\';
+          i++;
+        } else {
+          escaped += '\\\\';
+        }
+      } else {
+        escaped += c;
+      }
+    }
     return quoteChar + escaped + quoteChar;
   };
 

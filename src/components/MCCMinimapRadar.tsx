@@ -73,7 +73,6 @@ export const MCCMinimapRadar: React.FC<MCCMinimapRadarProps> = ({
   const handleScanCoords = () => {
     setIsScanning(true);
     onSendCommand('/position');
-    setTimeout(() => onSendCommand('/whereami'), 400);
     setTimeout(() => onSendCommand('/list'), 800);
     setTimeout(() => setIsScanning(false), 2000);
   };

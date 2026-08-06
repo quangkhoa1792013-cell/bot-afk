@@ -12,19 +12,19 @@ os.makedirs(BOTS_DIR, exist_ok=True)
 
 # 2. Định nghĩa nội dung các file .txt (script login MCC)
 txt_files = {
-    "login_khoablabla.txt": """wait 9
+    "login_khoablabla.txt": """wait 9000
 send /login khoalaptrinh
-wait 2
+wait 2000
 send /server smp""",
-    "login_ikujtyhfg.txt": """wait 9
+    "login_ikujtyhfg.txt": """wait 9000
 send /login khoablabla
-wait 2
+wait 2000
 send /server smp""",
-    "login_afk.txt": """wait 9
+    "login_afk.txt": """wait 9000
 send /login khoablabla
-wait 2
+wait 2000
 send /server smp
-wait 3
+wait 3000
 send /warp afk"""
 }
 

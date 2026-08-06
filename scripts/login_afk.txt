@@ -1,6 +1,6 @@
-wait 9
+wait 9000
 send /login khoablabla
-wait 2
+wait 2000
 send /server smp
-wait 3
+wait 3000
 send /warp afk

@@ -75,7 +75,8 @@ export type WSMessageFromClient =
   | { type: 'UPDATE_BOT_SETTING'; section: string; key: string; value: any; accountId?: string }
   | { type: 'ENABLE_SILENT_MODE'; accountId?: string }
   | { type: 'SET_AUTORELOG'; enabled: boolean; accountId?: string }
-  | { type: 'AUTO_FIX_INI'; accountId?: string };
+  | { type: 'AUTO_FIX_INI'; accountId?: string }
+  | { type: 'UPDATE_MAP_COLORS'; colors: number[]; width?: number; height?: number; accountId?: string };
 
 export type WSMessageFromServer =
   | { type: 'ACCOUNTS_LIST'; accounts: AccountSummary[]; activeAccountId: string }

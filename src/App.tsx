@@ -229,6 +229,7 @@ export default function App() {
                 onSendCommand={sendCommand}
                 onSaveIni={saveIni}
                 iniContent={iniContent}
+                accountId={activeAccountId}
               />
             </div>
           )}

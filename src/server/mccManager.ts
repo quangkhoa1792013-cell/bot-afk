@@ -15,6 +15,7 @@ import {
   AccountSummary,
 } from '../types.js';
 import { fixAndSanitizeIniContent } from '../lib/iniHelper.js';
+import { renderMapPaletteToPngBuffer, updateCurrentCaptchaPngBuffer } from './mapRenderer.js';
 
 const ansiConverter = new Convert({
   fg: '#e2e8f0',
@@ -53,9 +54,15 @@ export class MCCManager {
   private botsDir = pathModule.join(process.cwd(), 'bots');
   private scriptsDir = pathModule.join(process.cwd(), 'scripts');
   private activeAccountId: string = '';
+  private readyPromise: Promise<void>;
 
   constructor() {
-    this.init();
+    this.readyPromise = this.init();
+  }
+
+  /** Resolves once accounts + bots are fully loaded (fixes startup race with WS/REST clients) */
+  public async ready(): Promise<void> {
+    await this.readyPromise;
   }
 
   private async init() {
@@ -255,6 +262,18 @@ cd "$(dirname "$0")/../.."
     return { accountType: accountType || 'mojang', password: pass };
   }
 
+  /** Insert a key line into a specific INI section (creating the section if missing).
+      Appending at the end of the file would place the key in whatever the last section is,
+      which MCC would parse as part of that section and ignore. */
+  private insertIntoSection(raw: string, sectionName: string, line: string): string {
+    const escaped = sectionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const headerRe = new RegExp(`^(\\s*\\[${escaped}\\]\\s*)$`, 'm');
+    if (headerRe.test(raw)) {
+      return raw.replace(headerRe, `$1\n${line}`);
+    }
+    return `${raw.replace(/\n*$/, '')}\n\n[${sectionName}]\n${line}\n`;
+  }
+
   private syncProfileToIni(iniPath: string, prof: Partial<AccountProfile>) {
     try {
       let raw = fs.existsSync(iniPath) ? fs.readFileSync(iniPath, 'utf-8') : '';
@@ -265,7 +284,7 @@ cd "$(dirname "$0")/../.."
         if (/Server\s*=\s*\{[^}]*\}/.test(raw)) {
           raw = raw.replace(/Server\s*=\s*\{[^}]*\}/, `Server = { Host = "${this.iniSafe(prof.serverHost)}", Port = ${port} }`);
         } else {
-          raw += `\nServer = { Host = "${this.iniSafe(prof.serverHost)}", Port = ${port} }\n`;
+          raw = this.insertIntoSection(raw, 'Main.General', `Server = { Host = "${this.iniSafe(prof.serverHost)}", Port = ${port} }`);
         }
       }
 
@@ -273,7 +292,7 @@ cd "$(dirname "$0")/../.."
         if (/Account\s*=\s*\{[^}]*\}/.test(raw)) {
           raw = raw.replace(/Account\s*=\s*\{[^}]*\}/, `Account = { Login = "${this.iniSafe(prof.username)}", Password = "${creds.password}" }`);
         } else {
-          raw += `\nAccount = { Login = "${this.iniSafe(prof.username)}", Password = "${creds.password}" }\n`;
+          raw = this.insertIntoSection(raw, 'Main.General', `Account = { Login = "${this.iniSafe(prof.username)}", Password = "${creds.password}" }`);
         }
       }
 
@@ -281,7 +300,7 @@ cd "$(dirname "$0")/../.."
         if (/^(\s*AccountType\s*=\s*)"[^"]*"/m.test(raw)) {
           raw = raw.replace(/^(\s*AccountType\s*=\s*)"[^"]*"/m, `$1"${creds.accountType}"`);
         } else {
-          raw += `\nAccountType = "${creds.accountType}"\n`;
+          raw = this.insertIntoSection(raw, 'Main.General', `AccountType = "${creds.accountType}"`);
         }
       }
 
@@ -289,7 +308,7 @@ cd "$(dirname "$0")/../.."
         if (/^(\s*MinecraftVersion\s*=\s*)"[^"]*"/m.test(raw)) {
           raw = raw.replace(/^(\s*MinecraftVersion\s*=\s*)"[^"]*"/m, `$1"${prof.minecraftVersion}"`);
         } else {
-          raw += `\nMinecraftVersion = "${prof.minecraftVersion}"\n`;
+          raw = this.insertIntoSection(raw, 'Main.Advanced', `MinecraftVersion = "${prof.minecraftVersion}"`);
         }
       }
 
@@ -521,6 +540,27 @@ cd "$(dirname "$0")/../.."
     }
   }
 
+  /** Set Enabled = true/false in an INI section. Works even when the section exists
+      but has no Enabled line yet (previous regex replace silently did nothing then). */
+  private setSectionEnabled(raw: string, sectionName: string, enabled: boolean): string {
+    const escaped = sectionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const sectionRe = new RegExp(`\\[${escaped}\\][^\\[]*`, 'i');
+    const sectionMatch = raw.match(sectionRe);
+    if (!sectionMatch) {
+      return `${raw.replace(/\n*$/, '')}\n\n[${sectionName}]\nEnabled = ${enabled}\n`;
+    }
+    const section = sectionMatch[0];
+    // Only match the Enabled line itself (leading spaces/tabs, single line, no multi-line greed)
+    const enabledRe = /([ \t]*)Enabled[ \t]*=[ \t]*(true|false)[ \t]*$/im;
+    if (enabledRe.test(section)) {
+      const newSection = section.replace(enabledRe, `$1Enabled = ${enabled}`);
+      return raw.replace(section, newSection);
+    }
+    const insertAt = section.replace(/\n+$/, '');
+    const newSection = insertAt + (insertAt === '' || insertAt.endsWith('\n') ? '' : '\n') + `Enabled = ${enabled}\n`;
+    return raw.replace(section, newSection);
+  }
+
   public async startMCC(accountId?: string, isAutoRelaunch = false) {
     const targetId = accountId || this.activeAccountId;
     const inst = this.instances.get(targetId);
@@ -592,27 +632,42 @@ cd "$(dirname "$0")/../.."
         inst.startTime = 0;
         this.broadcastStatus(targetId);
 
-        // Auto-relaunch when the server drops the connection during login
-        // (AquaMC rate-limits logins per IP -> EndOfStreamException / "logging in too fast").
-        // Only retry quick exits (< 30s), with backoff, and not when the user stopped it.
-        if (
-          !inst.stoppedByUser &&
-          uptimeMs < QUICK_EXIT_THRESHOLD_MS &&
-          inst.retryCount < RELAUNCH_BACKOFFS.length
-        ) {
-          const delayMs = RELAUNCH_BACKOFFS[inst.retryCount];
-          inst.retryCount += 1;
-          this.addLog(
-            targetId,
-            'system',
-            `🔄 Server đã drop kết nối khi login (rate-limit/EOF). Tự động kết nối lại lần ${inst.retryCount}/${RELAUNCH_BACKOFFS.length} sau ${Math.round(delayMs / 1000)}s...`
-          );
-          inst.retryTimer = setTimeout(() => {
-            inst.retryTimer = null;
-            this.startMCC(targetId, true);
-          }, delayMs);
-        } else if (!inst.stoppedByUser) {
-          inst.retryCount = 0;
+        // Auto-relaunch when the server drops the connection.
+        // 1) Quick exits (< 45s) = login failures / rate-limit drops (AquaMC rate-limits
+        //    logins per IP -> EndOfStreamException / "logging in too fast").
+        //    Retrying at 8s just re-hits the still-active rate limit, so wait 60s/2m/5m.
+        // 2) Kicks after a long uptime = normal kicks/restarts. Reset the rate-limit
+        //    counter and relaunch after a fixed 30s delay so the AFK bot comes back 24/7.
+        if (!inst.stoppedByUser) {
+          if (uptimeMs < QUICK_EXIT_THRESHOLD_MS) {
+            if (inst.retryCount < RELAUNCH_BACKOFFS.length) {
+              const delayMs = RELAUNCH_BACKOFFS[inst.retryCount];
+              inst.retryCount += 1;
+              this.addLog(
+                targetId,
+                'system',
+                `🔄 Server đã drop kết nối khi login (rate-limit/EOF). Tự động kết nối lại lần ${inst.retryCount}/${RELAUNCH_BACKOFFS.length} sau ${Math.round(delayMs / 1000)}s...`
+              );
+              inst.retryTimer = setTimeout(() => {
+                inst.retryTimer = null;
+                this.startMCC(targetId, true);
+              }, delayMs);
+            } else {
+              inst.retryCount = 0;
+            }
+          } else {
+            inst.retryCount = 0;
+            const delayMs = 30000;
+            this.addLog(
+              targetId,
+              'system',
+              `🔄 Bot bị kick sau ${Math.floor(uptimeMs / 1000)}s online. Tự động kết nối lại sau ${Math.round(delayMs / 1000)}s...`
+            );
+            inst.retryTimer = setTimeout(() => {
+              inst.retryTimer = null;
+              this.startMCC(targetId, true);
+            }, delayMs);
+          }
         }
       });
 
@@ -690,7 +745,7 @@ cd "$(dirname "$0")/../.."
    * content and start MCC again. MCC rewrites bot.ini from its in-memory config
    * when it exits, so writing the INI before the stop gets clobbered.
    */
-  private async stopThenSaveIniAndRestart(targetId: string, raw: string) {
+  public async stopThenSaveIniAndRestart(targetId: string, raw: string) {
     const inst = this.instances.get(targetId);
     const wasRunning = inst && inst.mccProcess && !inst.mccProcess.killed;
     if (wasRunning) {
@@ -772,7 +827,7 @@ cd "$(dirname "$0")/../.."
       const repair = fixAndSanitizeIniContent(currentIni);
 
       if (repair.fixCount > 0) {
-        await fsPromises.writeFile(inst.iniPath, repair.repairedIni, 'utf-8');
+        await this.stopThenSaveIniAndRestart(targetId, repair.repairedIni);
         this.addLog(targetId, 'system', `✅ [Sửa Lỗi INI] Đã khắc phục thành công ${repair.fixCount} lỗi cú pháp.`);
       } else {
         this.addLog(targetId, 'system', `✅ File configuration đã chuẩn 100%, không phát hiện lỗi cú pháp!`);
@@ -877,6 +932,12 @@ cd "$(dirname "$0")/../.."
       await this.stopMCC(accountId);
     }
 
+    // Cancel any pending auto-relaunch timer
+    if (inst.retryTimer) {
+      clearTimeout(inst.retryTimer);
+      inst.retryTimer = null;
+    }
+
     // Remove the entire bot folder (bots/<name>/)
     try {
       const botDir = this.botDir(accountId);
@@ -914,16 +975,7 @@ cd "$(dirname "$0")/../.."
 
     try {
       let raw = await this.getIniContent(targetId);
-
-      if (/\[ChatBot\.AutoRelog\]/.test(raw)) {
-        if (new RegExp(`\\[ChatBot\\.AutoRelog\\][^\\[]*?Enabled\\s*=\\s*${enabled ? 'true' : 'false'}`, 'i').test(raw)) {
-          // already set - nothing to change
-        } else {
-          raw = raw.replace(/(\[ChatBot\.AutoRelog\][^\[]*?Enabled\s*=\s*)(true|false)/i, `$1${enabled}`);
-        }
-      } else {
-        raw += `\n[ChatBot.AutoRelog]\nEnabled = ${enabled}\n`;
-      }
+      raw = this.setSectionEnabled(raw, 'ChatBot.AutoRelog', enabled);
 
       this.addLog(targetId, 'system', enabled ? '🔄 Auto Relog (tự động kết nối lại) ĐÃ BẬT.' : '🚫 Auto Relog (tự động kết nối lại) ĐÃ TẮT.');
 
@@ -947,26 +999,12 @@ cd "$(dirname "$0")/../.."
     try {
       let raw = await this.getIniContent(targetId);
 
-      if (/\[ChatBot.AutoRelog\][^\[]*/.test(raw)) {
-        raw = raw.replace(/(\[ChatBot\.AutoRelog\][^\[]*?Enabled\s*=\s*)(true|false)/i, '$1false');
-      } else {
-        raw += '\n[ChatBot.AutoRelog]\nEnabled = false\n';
-      }
+      raw = this.setSectionEnabled(raw, 'ChatBot.AutoRelog', false);
+      raw = this.setSectionEnabled(raw, 'ChatBot.ScriptScheduler', false);
+      raw = this.setSectionEnabled(raw, 'ChatBot.AutoRespond', false);
 
-      if (/\[ChatBot.ScriptScheduler\][^\[]*/.test(raw)) {
-        raw = raw.replace(/(\[ChatBot\.ScriptScheduler\][^\[]*?Enabled\s*=\s*)(true|false)/i, '$1false');
-      } else {
-        raw += '\n[ChatBot.ScriptScheduler]\nEnabled = false\n';
-      }
-
-      if (/\[ChatBot.AutoRespond\][^\[]*/.test(raw)) {
-        raw = raw.replace(/(\[ChatBot\.AutoRespond\][^\[]*?Enabled\s*=\s*)(true|false)/i, '$1false');
-      } else {
-        raw += '\n[ChatBot.AutoRespond]\nEnabled = false\n';
-      }
-
-      if (/\[ChatBot.AutoEat\][^\[]*/.test(raw)) {
-        raw = raw.replace(/(\[ChatBot\.AutoEat\][^\[]*?Enabled\s*=\s*)(true|false)/i, '$1false');
+      if (/\[ChatBot\.AutoEat\][^\[]*/.test(raw)) {
+        raw = this.setSectionEnabled(raw, 'ChatBot.AutoEat', false);
       }
 
       if (raw.includes('ConsoleColorMode')) {
@@ -1082,7 +1120,23 @@ cd "$(dirname "$0")/../.."
         this.sendIniContentToClient(ws, targetAccountId);
         break;
       case 'SAVE_INI':
-        this.saveIniContent(msg.content, targetAccountId);
+        // MCC rewrites bot.ini from memory on exit, so write our content AFTER stopping
+        // the process, otherwise the editor changes get clobbered.
+        this.stopThenSaveIniAndRestart(targetAccountId, msg.content).catch((err) =>
+          this.addLog(targetAccountId, 'error', `Lỗi khi lưu INI: ${err.message}`)
+        );
+        break;
+      case 'UPDATE_MAP_COLORS':
+        try {
+          const colors = Array.isArray(msg.colors) ? msg.colors : [];
+          if (colors.length > 0) {
+            const buf = renderMapPaletteToPngBuffer(colors as number[]);
+            updateCurrentCaptchaPngBuffer(buf);
+            this.addLog(targetAccountId, 'system', `🗺️ Đã cập nhật Map Captcha từ ${colors.length} ô màu packet.`);
+          }
+        } catch (err: any) {
+          this.addLog(targetAccountId, 'error', `Lỗi khi render Map Captcha: ${err.message}`);
+        }
         break;
       case 'UPDATE_SERVER_ACCOUNT':
         this.updateServerAccount(

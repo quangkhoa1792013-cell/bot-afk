@@ -1,4 +1,4 @@
-wait 9
+wait 9000
 send /login khoablabla
-wait 2
+wait 2000
 send /server smp

@@ -10,6 +10,6 @@ log/
 logs/
 *.logs
 !.env.example
-libs/
-lib/
-libraries/
+/libs/
+/libraries/
+/lib/

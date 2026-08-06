@@ -16,12 +16,14 @@ import {
   Maximize2
 } from 'lucide-react';
 import { ChatMessageLog } from '../types';
+import { authHeaders, getAuthToken } from '../lib/auth';
 
 interface MCCMapCaptchaPanelProps {
   logs: ChatMessageLog[];
   onSendCommand: (cmd: string) => void;
   onSaveIni?: (content: string) => void;
   iniContent?: string;
+  accountId?: string;
 }
 
 export const MCCMapCaptchaPanel: React.FC<MCCMapCaptchaPanelProps> = ({
@@ -29,6 +31,7 @@ export const MCCMapCaptchaPanel: React.FC<MCCMapCaptchaPanelProps> = ({
   onSendCommand,
   onSaveIni,
   iniContent = '',
+  accountId,
 }) => {
   const [viewMode, setViewMode] = useState<'canvas' | 'ascii'>('canvas');
   const [captchaCode, setCaptchaCode] = useState('');
@@ -42,10 +45,14 @@ export const MCCMapCaptchaPanel: React.FC<MCCMapCaptchaPanelProps> = ({
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // Trigger Silent Anti-Kick mode via API
+  // Trigger Silent Anti-Kick mode via API (targets the currently selected account)
   const handleTriggerSilentMode = async () => {
     try {
-      const res = await fetch('/api/mcc/silent-mode', { method: 'POST' });
+      const res = await fetch('/api/mcc/silent-mode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({ accountId }),
+      });
       const data = await res.json();
       if (data.success) {
         setSilentSuccess(true);
@@ -62,7 +69,7 @@ export const MCCMapCaptchaPanel: React.FC<MCCMapCaptchaPanelProps> = ({
     try {
       await fetch('/api/captcha-image', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ code: codeStr }),
       });
       setImageTimestamp(Date.now());
@@ -378,7 +385,7 @@ export const MCCMapCaptchaPanel: React.FC<MCCMapCaptchaPanelProps> = ({
               >
                 {activeImgSource === 'png' ? (
                   <img
-                    src={`/captcha.png?t=${imageTimestamp}`}
+                    src={`/captcha.png?t=${imageTimestamp}${getAuthToken() ? `&token=${encodeURIComponent(getAuthToken())}` : ''}`}
                     alt="Map Captcha PNG Nét 100%"
                     className="w-[256px] h-[256px] object-contain image-rendering-pixelated bg-[#e8d8ab] shadow-inner rounded border border-[#5a3d1c]"
                   />
