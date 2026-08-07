@@ -13,6 +13,7 @@ import {
   WSMessageFromClient,
   AccountProfile,
   AccountSummary,
+  CommandShortcut,
 } from '../types.js';
 import { fixAndSanitizeIniContent } from '../lib/iniHelper.js';
 import { renderMapPaletteToPngBuffer, updateCurrentCaptchaPngBuffer } from './mapRenderer.js';
@@ -36,6 +37,7 @@ interface AccountInstance {
   stoppedByUser: boolean;
   retryCount: number;
   retryTimer: NodeJS.Timeout | null;
+  positionTimer: NodeJS.Timeout | null;
 }
 
 /**
@@ -45,6 +47,18 @@ interface AccountInstance {
  */
 const RELAUNCH_BACKOFFS = [60000, 120000, 300000];
 const QUICK_EXIT_THRESHOLD_MS = 45000;
+/** How often to auto-scan the bot's live position via `/position` (ms). */
+const POSITION_SCAN_INTERVAL_MS = 5000;
+
+/** Default shortcuts shown for every bot until the user customizes them */
+const DEFAULT_GLOBAL_SHORTCUTS: CommandShortcut[] = [
+  { id: 'default-help', label: '/help', command: '/help' },
+  { id: 'default-inventory', label: '/inventory', command: '/inventory' },
+  { id: 'default-tab', label: '/tab', command: '/tab' },
+  { id: 'default-smp', label: '/server smp', command: '/server smp' },
+  { id: 'default-reconnect', label: '/reconnect', command: '/reconnect' },
+  { id: 'default-quit', label: '/quit', command: '/quit' },
+];
 
 export class MCCManager {
   private instances: Map<string, AccountInstance> = new Map();
@@ -53,7 +67,10 @@ export class MCCManager {
   private binaryPath = pathModule.join(process.cwd(), 'MinecraftClient');
   private botsDir = pathModule.join(process.cwd(), 'bots');
   private scriptsDir = pathModule.join(process.cwd(), 'scripts');
+  private shortcutsFile = pathModule.join(process.cwd(), 'bots', 'shortcuts.json');
   private activeAccountId: string = '';
+  private globalShortcuts: CommandShortcut[] = [];
+  private localShortcuts: Map<string, CommandShortcut[]> = new Map();
   private readyPromise: Promise<void>;
 
   constructor() {
@@ -68,6 +85,103 @@ export class MCCManager {
   private async init() {
     await this.ensureBinaryAndIni();
     await this.loadAccounts();
+    await this.loadShortcuts();
+  }
+
+  // ---------- Command shortcuts (global = all bots, local = per-account) ----------
+
+  private async loadShortcuts() {
+    try {
+      const raw = await fsPromises.readFile(this.shortcutsFile, 'utf-8');
+      const data = JSON.parse(raw);
+      this.globalShortcuts = Array.isArray(data.global) && data.global.length > 0 ? data.global : [...DEFAULT_GLOBAL_SHORTCUTS];
+      this.localShortcuts = new Map();
+      if (data.local && typeof data.local === 'object') {
+        for (const [id, list] of Object.entries(data.local)) {
+          if (Array.isArray(list)) this.localShortcuts.set(id, list as CommandShortcut[]);
+        }
+      }
+    } catch {
+      this.globalShortcuts = [...DEFAULT_GLOBAL_SHORTCUTS];
+      this.localShortcuts = new Map();
+      await this.saveShortcuts();
+    }
+  }
+
+  private async saveShortcuts() {
+    const data: { global: CommandShortcut[]; local: Record<string, CommandShortcut[]> } = {
+      global: this.globalShortcuts,
+      local: {},
+    };
+    for (const [id, list] of this.localShortcuts) data.local[id] = list;
+    await fsPromises.writeFile(this.shortcutsFile, JSON.stringify(data, null, 2), 'utf-8');
+  }
+
+  public getShortcutsFor(accountId?: string): { global: CommandShortcut[]; local: CommandShortcut[] } {
+    const targetId = accountId || this.activeAccountId;
+    return {
+      global: this.globalShortcuts,
+      local: targetId ? this.localShortcuts.get(targetId) || [] : [],
+    };
+  }
+
+  private broadcastShortcuts(accountId?: string) {
+    const targetId = accountId || this.activeAccountId;
+    this.broadcast(
+      {
+        type: 'SHORTCUTS_LIST',
+        global: this.globalShortcuts,
+        local: this.localShortcuts.get(targetId) || [],
+        accountId: targetId,
+      },
+      targetId
+    );
+  }
+
+  public sendShortcutsToClient(ws: WebSocket, accountId?: string) {
+    if (ws.readyState !== WebSocket.OPEN) return;
+    const targetId = accountId || this.activeAccountId;
+    ws.send(
+      JSON.stringify({
+        type: 'SHORTCUTS_LIST',
+        global: this.globalShortcuts,
+        local: this.localShortcuts.get(targetId) || [],
+        accountId: targetId,
+      })
+    );
+  }
+
+  public async addShortcut(scope: 'global' | 'local', label: string, command: string, accountId?: string): Promise<boolean> {
+    if (!label.trim() || !command.trim()) return false;
+    const shortcut: CommandShortcut = {
+      id: `${scope}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      label: label.trim(),
+      command: command.trim(),
+    };
+    if (scope === 'global') {
+      this.globalShortcuts.push(shortcut);
+    } else {
+      const targetId = accountId || this.activeAccountId;
+      const list = this.localShortcuts.get(targetId) || [];
+      list.push(shortcut);
+      this.localShortcuts.set(targetId, list);
+    }
+    await this.saveShortcuts();
+    this.broadcastShortcuts(accountId);
+    return true;
+  }
+
+  public async deleteShortcut(scope: 'global' | 'local', shortcutId: string, accountId?: string): Promise<boolean> {
+    if (scope === 'global') {
+      this.globalShortcuts = this.globalShortcuts.filter((s) => s.id !== shortcutId);
+    } else {
+      const targetId = accountId || this.activeAccountId;
+      const list = (this.localShortcuts.get(targetId) || []).filter((s) => s.id !== shortcutId);
+      this.localShortcuts.set(targetId, list);
+    }
+    await this.saveShortcuts();
+    this.broadcastShortcuts(accountId);
+    return true;
   }
 
   private async ensureBinaryAndIni() {
@@ -204,6 +318,7 @@ export class MCCManager {
         stoppedByUser: false,
         retryCount: 0,
         retryTimer: null,
+        positionTimer: null,
       });
 
       // Regenerate run.sh so manually-created bots stay in sync
@@ -234,11 +349,13 @@ export class MCCManager {
       const scriptArg = inst.profile.script
         ? ` script="${pathModule.join(this.scriptsDir, inst.profile.script)}"`
         : '';
+      const port = inst.profile.serverPort || 25565;
+      const serverArg = port === 25565 ? inst.profile.serverHost : `${inst.profile.serverHost}:${port}`;
       const sh = `#!/bin/bash
 # Auto-generated launcher for bot: ${inst.profile.name}
 # Account: ${inst.profile.username} @ ${inst.profile.serverHost}:${inst.profile.serverPort}
 cd "$(dirname "$0")/../.."
-./MinecraftClient "${inst.iniPath}"${scriptArg}
+./MinecraftClient "${inst.profile.username}" "${inst.profile.password || '-'}" "${serverArg}"${scriptArg}
 `;
       const shPath = pathModule.join(botDir, 'run.sh');
       fs.writeFileSync(shPath, sh, 'utf-8');
@@ -371,6 +488,7 @@ cd "$(dirname "$0")/../.."
         running: status.running,
         pid: status.pid,
         uptimeSeconds: status.uptimeSeconds,
+        autoRelog: status.autoRelog,
       });
     }
     return list;
@@ -420,6 +538,9 @@ cd "$(dirname "$0")/../.."
 
     // Send INI Content
     this.sendIniContentToClient(ws, accountId);
+
+    // Send command shortcuts
+    this.sendShortcutsToClient(ws, accountId);
   }
 
   public broadcast(msg: WSMessageFromServer, targetAccountId?: string) {
@@ -476,8 +597,7 @@ cd "$(dirname "$0")/../.."
       const y = parseFloat(r1[2]);
       const z = parseFloat(r1[3]);
       if (!isNaN(x) && !isNaN(y) && !isNaN(z)) {
-        inst.position = { ...inst.position, x, y, z };
-        this.broadcast({ type: 'POSITION_UPDATE', position: inst.position, accountId }, accountId);
+        this.updatePositionAndBroadcast(inst, { x, y, z });
         return;
       }
     }
@@ -488,11 +608,28 @@ cd "$(dirname "$0")/../.."
       const y = parseFloat(r2[2]);
       const z = parseFloat(r2[3]);
       if (!isNaN(x) && !isNaN(y) && !isNaN(z)) {
-        inst.position = { ...inst.position, x, y, z };
-        this.broadcast({ type: 'POSITION_UPDATE', position: inst.position, accountId }, accountId);
+        this.updatePositionAndBroadcast(inst, { x, y, z });
         return;
       }
     }
+  }
+
+  /** Update position and only broadcast to clients when the XYZ actually changed
+      (avoids flooding the WS with identical coords from periodic /position scans). */
+  private updatePositionAndBroadcast(inst: AccountInstance, pos: Partial<PlayerPosition>) {
+    const prev = inst.position;
+    const changed =
+      (pos.x !== undefined && pos.x !== prev.x) ||
+      (pos.y !== undefined && pos.y !== prev.y) ||
+      (pos.z !== undefined && pos.z !== prev.z);
+    if (!changed) return;
+    const updated = { ...prev, ...pos };
+    const prevKey = `${prev.x}|${prev.y}|${prev.z}`;
+    const newKey = `${updated.x}|${updated.y}|${updated.z}`;
+    if (prevKey === newKey) return;
+    inst.position = updated;
+    const accountId = inst.profile.id;
+    this.broadcast({ type: 'POSITION_UPDATE', position: inst.position, accountId }, accountId);
   }
 
   public getStatusForAccount(accountId: string): MCCProcessStatus {
@@ -582,8 +719,15 @@ cd "$(dirname "$0")/../.."
 
     this.addLog(targetId, 'system', `🚀 Launching MCC for account: ${inst.profile.name} (${inst.profile.username} @ ${inst.profile.serverHost}:${inst.profile.serverPort})...`);
     try {
-      // Spawn MCC process with the bot's own INI file + optional login script
-      const args: string[] = [inst.iniPath];
+      // Spawn MCC with CLI-style args (username, password, server) like the
+      // user's manual `./MinecraftClient <user> <pass> <server>` launches.
+      // Launching with only an INI path + `script=` reproducibly dies during
+      // login with `EndOfStreamException: Attempted to read past the end of
+      // the stream`, so fall back to the direct-args form which connects fine.
+      const port = inst.profile.serverPort || 25565;
+      const password = inst.profile.password || '-';
+      const serverArg = port === 25565 ? inst.profile.serverHost : `${inst.profile.serverHost}:${port}`;
+      const args: string[] = [inst.profile.username, password, serverArg];
       if (inst.profile.script) {
         const scriptPath = pathModule.join(this.scriptsDir, inst.profile.script);
         try {
@@ -625,36 +769,52 @@ cd "$(dirname "$0")/../.."
         });
       }
 
+      if (!inst.positionTimer) {
+        inst.positionTimer = setInterval(() => {
+          const cur = this.instances.get(targetId);
+          if (!cur || !cur.mccProcess || cur.mccProcess.killed || !cur.mccProcess.stdin || cur.mccProcess.stdin.destroyed) {
+            return;
+          }
+          cur.mccProcess.stdin.write('/position\n');
+        }, POSITION_SCAN_INTERVAL_MS);
+      }
+
       inst.mccProcess.on('exit', (code, signal) => {
         const uptimeMs = inst.startTime ? Date.now() - inst.startTime : 0;
+        if (inst.positionTimer) {
+          clearInterval(inst.positionTimer);
+          inst.positionTimer = null;
+        }
         this.addLog(targetId, 'kicked', `[MCC Process Exited] Exit Code: ${code ?? 'N/A'}, Signal: ${signal ?? 'N/A'}, Uptime: ${Math.floor(uptimeMs / 1000)}s`);
         inst.mccProcess = null;
         inst.startTime = 0;
         this.broadcastStatus(targetId);
 
-        // Auto-relaunch when the server drops the connection.
-        // 1) Quick exits (< 45s) = login failures / rate-limit drops (AquaMC rate-limits
+        // Auto-relaunch ONLY when AutoRelog is explicitly ON for the bot.
+        // 1) Quick exits (< 45s) = login failures / rate-limits / EOF (AquaMC rate-limits
         //    logins per IP -> EndOfStreamException / "logging in too fast").
         //    Retrying at 8s just re-hits the still-active rate limit, so wait 60s/2m/5m.
         // 2) Kicks after a long uptime = normal kicks/restarts. Reset the rate-limit
-        //    counter and relaunch after a fixed 30s delay so the AFK bot comes back 24/7.
-        if (!inst.stoppedByUser) {
+        //    counter and relaunch after a fixed 30s delay so the AFK bot comes back.
+        // If AutoRelog is OFF, a kick stops the bot for good until the user re-starts it.
+        const autoRelogOn = this.readAutoRelogFromIni(inst.iniPath);
+        if (!inst.stoppedByUser && autoRelogOn) {
           if (uptimeMs < QUICK_EXIT_THRESHOLD_MS) {
-            if (inst.retryCount < RELAUNCH_BACKOFFS.length) {
-              const delayMs = RELAUNCH_BACKOFFS[inst.retryCount];
-              inst.retryCount += 1;
-              this.addLog(
-                targetId,
-                'system',
-                `🔄 Server đã drop kết nối khi login (rate-limit/EOF). Tự động kết nối lại lần ${inst.retryCount}/${RELAUNCH_BACKOFFS.length} sau ${Math.round(delayMs / 1000)}s...`
-              );
-              inst.retryTimer = setTimeout(() => {
-                inst.retryTimer = null;
-                this.startMCC(targetId, true);
-              }, delayMs);
-            } else {
-              inst.retryCount = 0;
-            }
+            // Rate-limit / EOF drops during login. Backoff, but NEVER give up:
+            // after the last scheduled backoff, keep retrying forever at the max delay.
+            const delayMs = inst.retryCount < RELAUNCH_BACKOFFS.length
+              ? RELAUNCH_BACKOFFS[inst.retryCount]
+              : RELAUNCH_BACKOFFS[RELAUNCH_BACKOFFS.length - 1];
+            inst.retryCount += 1;
+            this.addLog(
+              targetId,
+              'system',
+              `🔄 Server drop kết nối khi login (rate-limit/EOF). Tự động kết nối lại lần ${inst.retryCount} sau ${Math.round(delayMs / 1000)}s...`
+            );
+            inst.retryTimer = setTimeout(() => {
+              inst.retryTimer = null;
+              this.startMCC(targetId, true);
+            }, delayMs);
           } else {
             inst.retryCount = 0;
             const delayMs = 30000;
@@ -668,6 +828,16 @@ cd "$(dirname "$0")/../.."
               this.startMCC(targetId, true);
             }, delayMs);
           }
+        } else if (!inst.stoppedByUser) {
+          inst.retryCount = 0;
+          const reason = uptimeMs < QUICK_EXIT_THRESHOLD_MS
+            ? `Server từ chối/ngắt lúc login (rate-limit/EOF)`
+            : `Bot bị kick sau ${Math.floor(uptimeMs / 1000)}s online`;
+          this.addLog(
+            targetId,
+            'system',
+            `⛔ ${reason}. AutoRelog đang TẮT nên bot đã DỪNG HẲN. Bật AutoRelog để tự động reconnect, hoặc bấm Start để chạy lại.`
+          );
         }
       });
 
@@ -685,18 +855,27 @@ cd "$(dirname "$0")/../.."
   public async stopMCC(accountId?: string): Promise<void> {
     const targetId = accountId || this.activeAccountId;
     const inst = this.instances.get(targetId);
-    if (!inst || !inst.mccProcess || inst.mccProcess.killed) {
-      if (inst) inst.mccProcess = null;
-      this.addLog(targetId, 'system', `[MCC Manager] No active process to stop for account ${targetId}.`);
-      return;
-    }
-
-    this.addLog(targetId, 'system', `⏹️ Stopping Minecraft Console Client for account ${inst.profile.name}...`);
+    if (!inst) return;
+    // Stop even when no live process: cancel a pending auto-relaunch so the
+    // bot stays down (otherwise a retryTimer firing would bring it back up).
     inst.stoppedByUser = true;
     if (inst.retryTimer) {
       clearTimeout(inst.retryTimer);
       inst.retryTimer = null;
     }
+    if (!inst.mccProcess || inst.mccProcess.killed) {
+      inst.mccProcess = null;
+      inst.startTime = 0;
+      if (inst.positionTimer) {
+        clearInterval(inst.positionTimer);
+        inst.positionTimer = null;
+      }
+      this.broadcastStatus(targetId);
+      this.addLog(targetId, 'system', `[MCC Manager] No active process to stop for account ${targetId} — auto-relaunch cancelled.`);
+      return;
+    }
+
+    this.addLog(targetId, 'system', `⏹️ Stopping Minecraft Console Client for account ${inst.profile.name}...`);
 
     return new Promise<void>((resolve) => {
       let resolved = false;
@@ -705,6 +884,10 @@ cd "$(dirname "$0")/../.."
           resolved = true;
           inst.mccProcess = null;
           inst.startTime = 0;
+          if (inst.positionTimer) {
+            clearInterval(inst.positionTimer);
+            inst.positionTimer = null;
+          }
           this.broadcastStatus(targetId);
           resolve();
         }
@@ -769,6 +952,59 @@ cd "$(dirname "$0")/../.."
 
     this.addLog(targetId, 'action', `> ${cmd}`);
     inst.mccProcess.stdin.write(cmd + '\n');
+  }
+
+  // ---------- Bulk / dashboard actions (multi-bot, staggered) ----------
+
+  /**
+   * Send the same command to several bots, one by one, with `staggerMs`
+   * between each send so the server never sees "logging in too fast".
+   */
+  public broadcastCommand(accountIds: string[], command: string, staggerMs = 5000) {
+    const ids = accountIds.filter((id) => this.instances.has(id));
+    ids.forEach((accountId, i) => {
+      const delay = i * Math.max(0, staggerMs);
+      setTimeout(() => {
+        this.sendCommand(command, accountId);
+        this.addLog(accountId, 'system', `📡 Nhận lệnh từ Dashboard (bot thứ ${i + 1}/${ids.length}): "${command}"`);
+      }, delay);
+    });
+    this.addLog(ids[0] || '', 'system', `📤 Đã gửi lệnh "${command}" cho ${ids.length} bot, giãn cách ${staggerMs / 1000}s giữa các bot.`);
+  }
+
+  /** Start several bots, staggered so logins don't hit the rate limit at once. */
+  public broadcastStart(accountIds: string[], staggerMs = 5000) {
+    const ids = accountIds.filter((id) => this.instances.has(id));
+    ids.forEach((accountId, i) => {
+      const delay = i * Math.max(0, staggerMs);
+      setTimeout(() => this.startMCC(accountId), delay);
+    });
+    this.addLog(ids[0] || '', 'system', `🚀 Đang start ${ids.length} bot, mỗi bot cách nhau ${staggerMs / 1000}s...`);
+  }
+
+  /** Stop several bots at once. */
+  public broadcastStop(accountIds: string[]) {
+    const ids = accountIds.filter((id) => this.instances.has(id));
+    ids.forEach((accountId) => this.stopMCC(accountId));
+    this.addLog(ids[0] || '', 'system', `⏹️ Đã yêu cầu dừng ${ids.length} bot.`);
+  }
+
+  /** Get a compact snapshot of every bot for the dashboard table. */
+  public getDashboardSummary() {
+    const accounts = this.getAccountsSummaries();
+    const statuses = new Map<string, MCCProcessStatus>();
+    for (const id of this.instances.keys()) {
+      statuses.set(id, this.getStatusForAccount(id));
+    }
+    return {
+      total: accounts.length,
+      running: accounts.filter((a) => a.running).length,
+      stopped: accounts.filter((a) => !a.running).length,
+      accounts: accounts.map((acc) => ({
+        ...acc,
+        status: statuses.get(acc.id),
+      })),
+    };
   }
 
   public async getIniContent(accountId?: string): Promise<string> {
@@ -912,6 +1148,7 @@ cd "$(dirname "$0")/../.."
       stoppedByUser: false,
       retryCount: 0,
       retryTimer: null,
+      positionTimer: null,
     };
     this.instances.set(id, inst);
     this.generateRunSh(inst);
@@ -1116,6 +1353,15 @@ cd "$(dirname "$0")/../.."
       case 'SEND_CHAT':
         this.sendCommand(msg.type === 'SEND_COMMAND' ? msg.command : msg.message, targetAccountId);
         break;
+      case 'BROADCAST_COMMAND':
+        this.broadcastCommand(msg.accountIds || [], msg.command, msg.staggerMs);
+        break;
+      case 'BROADCAST_START':
+        this.broadcastStart(msg.accountIds || [], msg.staggerMs);
+        break;
+      case 'BROADCAST_STOP':
+        this.broadcastStop(msg.accountIds || []);
+        break;
       case 'GET_INI':
         this.sendIniContentToClient(ws, targetAccountId);
         break;
@@ -1158,6 +1404,21 @@ cd "$(dirname "$0")/../.."
         break;
       case 'AUTO_FIX_INI':
         this.autoFixIni(targetAccountId);
+        break;
+      case 'GET_SHORTCUTS':
+        this.sendShortcutsToClient(ws, targetAccountId);
+        break;
+      case 'ADD_SHORTCUT':
+        this.addShortcut(msg.scope, msg.label, msg.command, msg.scope === 'global' ? undefined : targetAccountId).then((ok) => {
+          this.sendShortcutsToClient(ws, targetAccountId);
+          this.addLog(targetAccountId, 'system', ok ? `⚡ Đã thêm phím tắt "${msg.label}"${msg.scope === 'global' ? ' (cho mọi bot)' : ''}.` : '⚠️ Không thêm được phím tắt (thiếu nhãn hoặc lệnh).');
+        });
+        break;
+      case 'DELETE_SHORTCUT':
+        this.deleteShortcut(msg.scope, msg.shortcutId, msg.scope === 'global' ? undefined : targetAccountId).then((ok) => {
+          this.sendShortcutsToClient(ws, targetAccountId);
+          if (ok) this.addLog(targetAccountId, 'system', `🗑️ Đã xóa phím tắt${msg.scope === 'global' ? ' (toàn cục)' : ' (bot này)'}.`);
+        });
         break;
     }
   }

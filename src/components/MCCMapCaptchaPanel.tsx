@@ -218,7 +218,7 @@ export const MCCMapCaptchaPanel: React.FC<MCCMapCaptchaPanelProps> = ({
   };
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-5 shadow-2xl">
+    <div className="panel p-5 space-y-5">
       {/* Top Title Banner */}
       <div className="flex flex-wrap items-center justify-between pb-3 border-b border-slate-800 gap-3">
         <div className="flex items-center gap-3">
@@ -244,28 +244,20 @@ export const MCCMapCaptchaPanel: React.FC<MCCMapCaptchaPanelProps> = ({
             </span>
           )}
 
-          <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-medium">
+          <div className="seg">
             <button
               onClick={() => setViewMode('canvas')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                viewMode === 'canvas'
-                  ? 'bg-amber-600 text-white font-semibold shadow'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
+              className={`seg-item ${viewMode === 'canvas' ? 'seg-item-active' : ''}`}
             >
               <Eye className="w-3.5 h-3.5" />
-              Giải Pháp 1: Web Canvas Image
+              Web Canvas
             </button>
             <button
               onClick={() => setViewMode('ascii')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                viewMode === 'ascii'
-                  ? 'bg-amber-600 text-white font-semibold shadow'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
+              className={`seg-item ${viewMode === 'ascii' ? 'seg-item-active' : ''}`}
             >
               <Terminal className="w-3.5 h-3.5" />
-              Giải Pháp 2: Terminal 24-bit ANSI
+              ANSI 24-bit
             </button>
           </div>
         </div>

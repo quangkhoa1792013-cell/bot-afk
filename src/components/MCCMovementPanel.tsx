@@ -68,33 +68,33 @@ export const MCCMovementPanel: React.FC<MCCMovementPanelProps> = ({
   };
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-4 shadow-xl">
+    <div className="panel p-4 space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between panel-header !px-0 !pt-0">
+        <div className="panel-title">
           <Navigation className="w-4 h-4 text-emerald-400" />
-          <h3 className="text-xs font-bold text-slate-100 uppercase tracking-wider">Hệ Thống Di Chuyển & Góc Nhìn (Movement)</h3>
+          <span>Di Chuyển &amp; Góc Nhìn</span>
         </div>
         <div className="flex items-center gap-1.5 bg-slate-950 px-2 py-1 rounded border border-slate-800 text-[11px] font-mono text-slate-400">
-          <span>Bước di chuyển:</span>
+          <span>Bước:</span>
           <select
             value={stepSize}
             onChange={(e) => setStepSize(Number(e.target.value))}
             className="bg-slate-900 text-emerald-400 font-bold focus:outline-none cursor-pointer rounded px-1"
           >
-            <option value={1}>1 block</option>
-            <option value={3}>3 blocks</option>
-            <option value={5}>5 blocks</option>
-            <option value={10}>10 blocks</option>
+            <option value={1}>1</option>
+            <option value={3}>3</option>
+            <option value={5}>5</option>
+            <option value={10}>10</option>
           </select>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* D-Pad Directional Movement Controls */}
-        <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 flex flex-col items-center justify-center space-y-3">
+        <div className="surface p-3 flex flex-col items-center justify-center space-y-3">
           <span className="text-[11px] font-mono font-semibold text-slate-400 flex items-center gap-1">
-            <Footprints className="w-3.5 h-3.5 text-emerald-400" /> Bàn Phím Hướng Di Chuyển (Move)
+            <Footprints className="w-3.5 h-3.5 text-emerald-400" /> Di Chuyển (Move)
           </span>
 
           <div className="grid grid-cols-3 gap-2 w-44">
@@ -150,14 +150,14 @@ export const MCCMovementPanel: React.FC<MCCMovementPanelProps> = ({
             <button
               onClick={() => moveDirection('up')}
               disabled={!isMccRunning}
-              className="px-3 py-1.5 bg-slate-800 hover:bg-cyan-600 text-slate-300 hover:text-white text-[11px] font-mono rounded-md cursor-pointer transition-colors"
+              className="btn btn-ghost !px-3 !py-1.5 !text-[11px]"
             >
               ▲ Lên (+Y)
             </button>
             <button
               onClick={() => moveDirection('down')}
               disabled={!isMccRunning}
-              className="px-3 py-1.5 bg-slate-800 hover:bg-cyan-600 text-slate-300 hover:text-white text-[11px] font-mono rounded-md cursor-pointer transition-colors"
+              className="btn btn-ghost !px-3 !py-1.5 !text-[11px]"
             >
               ▼ Xuống (-Y)
             </button>
@@ -165,9 +165,9 @@ export const MCCMovementPanel: React.FC<MCCMovementPanelProps> = ({
         </div>
 
         {/* Camera Look / Facing Direction */}
-        <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 flex flex-col justify-between space-y-3">
+        <div className="surface p-3 flex flex-col justify-between space-y-3">
           <span className="text-[11px] font-mono font-semibold text-slate-400 flex items-center gap-1">
-            <Eye className="w-3.5 h-3.5 text-cyan-400" /> Quay Hướng Nhìn (Look Angle)
+            <Eye className="w-3.5 h-3.5 text-cyan-400" /> Góc Nhìn (Look)
           </span>
 
           <div className="grid grid-cols-2 gap-2">
@@ -176,7 +176,7 @@ export const MCCMovementPanel: React.FC<MCCMovementPanelProps> = ({
               disabled={!isMccRunning}
               className="px-2.5 py-1.5 bg-slate-900 border border-slate-800 hover:border-cyan-500 text-slate-300 text-xs font-mono rounded-lg cursor-pointer transition-all text-left flex items-center justify-between"
             >
-              <span>N (North)</span>
+              <span>N (Bắc)</span>
               <span className="text-[10px] text-cyan-400">180°</span>
             </button>
             <button
@@ -184,7 +184,7 @@ export const MCCMovementPanel: React.FC<MCCMovementPanelProps> = ({
               disabled={!isMccRunning}
               className="px-2.5 py-1.5 bg-slate-900 border border-slate-800 hover:border-cyan-500 text-slate-300 text-xs font-mono rounded-lg cursor-pointer transition-all text-left flex items-center justify-between"
             >
-              <span>S (South)</span>
+              <span>S (Nam)</span>
               <span className="text-[10px] text-cyan-400">0°</span>
             </button>
             <button
@@ -192,7 +192,7 @@ export const MCCMovementPanel: React.FC<MCCMovementPanelProps> = ({
               disabled={!isMccRunning}
               className="px-2.5 py-1.5 bg-slate-900 border border-slate-800 hover:border-cyan-500 text-slate-300 text-xs font-mono rounded-lg cursor-pointer transition-all text-left flex items-center justify-between"
             >
-              <span>W (West)</span>
+              <span>W (Tây)</span>
               <span className="text-[10px] text-cyan-400">90°</span>
             </button>
             <button
@@ -200,7 +200,7 @@ export const MCCMovementPanel: React.FC<MCCMovementPanelProps> = ({
               disabled={!isMccRunning}
               className="px-2.5 py-1.5 bg-slate-900 border border-slate-800 hover:border-cyan-500 text-slate-300 text-xs font-mono rounded-lg cursor-pointer transition-all text-left flex items-center justify-between"
             >
-              <span>E (East)</span>
+              <span>E (Đông)</span>
               <span className="text-[10px] text-cyan-400">270°</span>
             </button>
             <button
@@ -208,7 +208,7 @@ export const MCCMovementPanel: React.FC<MCCMovementPanelProps> = ({
               disabled={!isMccRunning}
               className="px-2.5 py-1.5 bg-slate-900 border border-slate-800 hover:border-cyan-500 text-slate-300 text-xs font-mono rounded-lg cursor-pointer transition-all text-left flex items-center justify-between"
             >
-              <span>Nhìn Lên (Up)</span>
+              <span>Lên</span>
               <span className="text-[10px] text-cyan-400">-90°</span>
             </button>
             <button
@@ -216,7 +216,7 @@ export const MCCMovementPanel: React.FC<MCCMovementPanelProps> = ({
               disabled={!isMccRunning}
               className="px-2.5 py-1.5 bg-slate-900 border border-slate-800 hover:border-cyan-500 text-slate-300 text-xs font-mono rounded-lg cursor-pointer transition-all text-left flex items-center justify-between"
             >
-              <span>Nhìn Xuống (Down)</span>
+              <span>Xuống</span>
               <span className="text-[10px] text-cyan-400">90°</span>
             </button>
           </div>
@@ -224,35 +224,13 @@ export const MCCMovementPanel: React.FC<MCCMovementPanelProps> = ({
           {/* Direct Coordinate Pathing Input */}
           <form onSubmit={handleGoToCoords} className="pt-2 border-t border-slate-800/80 space-y-1.5">
             <span className="text-[10px] font-mono text-slate-400 flex items-center gap-1">
-              <Target className="w-3 h-3 text-indigo-400" /> Di chuyển tới Tọa Độ cụ thể:
+              <Target className="w-3 h-3 text-indigo-400" /> Đi tới toạ độ:
             </span>
             <div className="flex items-center gap-1.5">
-              <input
-                type="text"
-                placeholder="X"
-                value={targetX}
-                onChange={(e) => setTargetX(e.target.value)}
-                className="w-1/3 bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs font-mono text-slate-200 focus:outline-none focus:border-indigo-500"
-              />
-              <input
-                type="text"
-                placeholder="Y"
-                value={targetY}
-                onChange={(e) => setTargetY(e.target.value)}
-                className="w-1/3 bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs font-mono text-slate-200 focus:outline-none focus:border-indigo-500"
-              />
-              <input
-                type="text"
-                placeholder="Z"
-                value={targetZ}
-                onChange={(e) => setTargetZ(e.target.value)}
-                className="w-1/3 bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs font-mono text-slate-200 focus:outline-none focus:border-indigo-500"
-              />
-              <button
-                type="submit"
-                disabled={!isMccRunning}
-                className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white font-mono text-xs rounded cursor-pointer transition-colors shrink-0"
-              >
+              <input type="text" placeholder="X" value={targetX} onChange={(e) => setTargetX(e.target.value)} className="input-sm w-1/3" />
+              <input type="text" placeholder="Y" value={targetY} onChange={(e) => setTargetY(e.target.value)} className="input-sm w-1/3" />
+              <input type="text" placeholder="Z" value={targetZ} onChange={(e) => setTargetZ(e.target.value)} className="input-sm w-1/3" />
+              <button type="submit" disabled={!isMccRunning} className="btn btn-primary !px-3 !py-1.5">
                 Go
               </button>
             </div>

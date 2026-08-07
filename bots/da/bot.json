@@ -1,0 +1,11 @@
+{
+  "name": "da",
+  "username": "dwjio",
+  "password": "-",
+  "accountType": "mojang",
+  "serverHost": "aquamc.vn",
+  "serverPort": 25565,
+  "minecraftVersion": "auto",
+  "script": "login_afk.txt",
+  "id": "da"
+}

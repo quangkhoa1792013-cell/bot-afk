@@ -1,12 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Terminal, Trash2, ArrowDown, Search, Zap, Filter, Maximize2, Minimize2 } from 'lucide-react';
-import { ChatMessageLog } from '../types';
+import { Send, Terminal, Trash2, ArrowDown, Search, Zap, Filter, Maximize2, Minimize2, Settings2, Plus } from 'lucide-react';
+import { ChatMessageLog, CommandShortcut } from '../types';
 
 interface MCCTerminalProps {
   logs: ChatMessageLog[];
   onSendCommand: (command: string) => void;
   onClearLogs: () => void;
   isMccRunning: boolean;
+  shortcuts?: { global: CommandShortcut[]; local: CommandShortcut[] };
+  onManageShortcuts?: () => void;
 }
 
 export const MCCTerminal: React.FC<MCCTerminalProps> = ({
@@ -14,6 +16,8 @@ export const MCCTerminal: React.FC<MCCTerminalProps> = ({
   onSendCommand,
   onClearLogs,
   isMccRunning,
+  shortcuts = { global: [], local: [] },
+  onManageShortcuts,
 }) => {
   const [inputText, setInputText] = useState('');
   const [history, setHistory] = useState<string[]>([]);
@@ -93,9 +97,9 @@ export const MCCTerminal: React.FC<MCCTerminalProps> = ({
             MCC Log Console ({displayLogs.length} / {logs.length} dòng)
           </span>
           {isMccRunning && (
-            <span className="flex items-center gap-1 text-[11px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              Live Stream
+            <span className="badge badge-green !text-[10px]">
+              <span className="dot-on" />
+              Live
             </span>
           )}
         </div>
@@ -103,31 +107,18 @@ export const MCCTerminal: React.FC<MCCTerminalProps> = ({
         {/* Tools: Filter, Search & Clear */}
         <div className="flex items-center gap-2">
           {/* Type Filter */}
-          <div className="flex items-center bg-slate-950 border border-slate-800 rounded-md p-0.5 text-[11px] font-mono">
-            <button
-              onClick={() => setFilterType('all')}
-              className={`px-2 py-0.5 rounded cursor-pointer ${filterType === 'all' ? 'bg-emerald-600 text-white font-bold' : 'text-slate-400 hover:text-slate-200'}`}
-            >
-              Tất cả
-            </button>
-            <button
-              onClick={() => setFilterType('chat')}
-              className={`px-2 py-0.5 rounded cursor-pointer ${filterType === 'chat' ? 'bg-emerald-600 text-white font-bold' : 'text-slate-400 hover:text-slate-200'}`}
-            >
-              Chat
-            </button>
-            <button
-              onClick={() => setFilterType('action')}
-              className={`px-2 py-0.5 rounded cursor-pointer ${filterType === 'action' ? 'bg-emerald-600 text-white font-bold' : 'text-slate-400 hover:text-slate-200'}`}
-            >
-              Lệnh
-            </button>
-            <button
-              onClick={() => setFilterType('error')}
-              className={`px-2 py-0.5 rounded cursor-pointer ${filterType === 'error' ? 'bg-rose-600 text-white font-bold' : 'text-slate-400 hover:text-slate-200'}`}
-            >
-              Lỗi
-            </button>
+          <div className="seg !p-0.5">
+            {(['all', 'chat', 'action', 'error'] as const).map((f) => (
+              <button
+                key={f}
+                onClick={() => setFilterType(f)}
+                className={`px-2 py-0.5 rounded cursor-pointer !text-[11px] ${
+                  filterType === f ? 'bg-emerald-600 text-white font-bold' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                {f === 'all' ? 'Tất cả' : f === 'chat' ? 'Chat' : f === 'action' ? 'Lệnh' : 'Lỗi'}
+              </button>
+            ))}
           </div>
 
           {/* Search Input */}
@@ -144,7 +135,7 @@ export const MCCTerminal: React.FC<MCCTerminalProps> = ({
 
           <button
             onClick={() => setIsCompact(!isCompact)}
-            className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-md transition-colors"
+            className="btn-icon"
             title={isCompact ? "Mở rộng chiều cao" : "Thu gọn chiều cao"}
           >
             {isCompact ? <Maximize2 className="w-3.5 h-3.5" /> : <Minimize2 className="w-3.5 h-3.5" />}
@@ -152,7 +143,7 @@ export const MCCTerminal: React.FC<MCCTerminalProps> = ({
 
           <button
             onClick={onClearLogs}
-            className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-rose-400 rounded-md transition-colors"
+            className="btn-icon hover:!text-rose-400"
             title="Xóa Log Terminal"
           >
             <Trash2 className="w-3.5 h-3.5" />
@@ -218,43 +209,34 @@ export const MCCTerminal: React.FC<MCCTerminalProps> = ({
       {/* Quick Action Commands Macro Bar */}
       <div className="bg-slate-900/90 border-t border-slate-800 px-3 py-1.5 flex flex-wrap items-center gap-1.5 text-[11px] font-mono">
         <span className="text-slate-400 flex items-center gap-1 font-semibold text-[10px]">
-          <Zap className="w-3 h-3 text-amber-400" /> Phím tắt lệnh:
+          <Zap className="w-3 h-3 text-amber-400" /> Phím tắt:
         </span>
+        {shortcuts.local.map((s) => (
+          <button
+            key={s.id}
+            onClick={() => sendQuickMacro(s.command)}
+            className="px-2 py-0.5 bg-emerald-900/40 hover:bg-emerald-800/60 border border-emerald-700/40 text-emerald-200 rounded cursor-pointer"
+            title={`${s.command} (chỉ bot này)`}
+          >
+            {s.label}
+          </button>
+        ))}
+        {shortcuts.global.map((s) => (
+          <button
+            key={s.id}
+            onClick={() => sendQuickMacro(s.command)}
+            className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded cursor-pointer"
+            title={`${s.command} (mọi bot)`}
+          >
+            {s.label}
+          </button>
+        ))}
         <button
-          onClick={() => sendQuickMacro('/help')}
-          className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded cursor-pointer"
+          onClick={onManageShortcuts}
+          className="ml-auto px-2 py-0.5 bg-slate-800 hover:bg-slate-700 border border-dashed border-slate-600 text-slate-300 rounded cursor-pointer flex items-center gap-1"
+          title="Thêm / Xóa phím tắt (cho 1 bot hoặc cho tất cả các bot)"
         >
-          /help
-        </button>
-        <button
-          onClick={() => sendQuickMacro('/inventory')}
-          className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded cursor-pointer"
-        >
-          /inventory
-        </button>
-        <button
-          onClick={() => sendQuickMacro('/tab')}
-          className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded cursor-pointer"
-        >
-          /tab
-        </button>
-        <button
-          onClick={() => sendQuickMacro('/server smp')}
-          className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded cursor-pointer"
-        >
-          /server smp
-        </button>
-        <button
-          onClick={() => sendQuickMacro('/reconnect')}
-          className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-300 rounded cursor-pointer"
-        >
-          /reconnect
-        </button>
-        <button
-          onClick={() => sendQuickMacro('/quit')}
-          className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-rose-400 rounded cursor-pointer"
-        >
-          /quit
+          <Settings2 className="w-3 h-3" /> <Plus className="w-3 h-3" /> Quản lý
         </button>
       </div>
 
@@ -279,7 +261,7 @@ export const MCCTerminal: React.FC<MCCTerminalProps> = ({
         <button
           type="submit"
           disabled={!isMccRunning || !inputText.trim()}
-          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-600 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 cursor-pointer shrink-0"
+          className="btn btn-primary"
         >
           <Send className="w-4 h-4" />
           Gửi

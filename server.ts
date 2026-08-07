@@ -170,6 +170,35 @@ async function startServer() {
     });
   });
 
+  // Command shortcuts: GET global + local for an account
+  app.get('/api/shortcuts', (req, res) => {
+    if (!requireAuth(req, res)) return;
+    const accountId = typeof req.query.accountId === 'string' ? req.query.accountId : undefined;
+    res.json({ success: true, ...mccManager.getShortcutsFor(accountId) });
+  });
+
+  // Add a shortcut (global = all bots, local = one bot)
+  app.post('/api/shortcuts', async (req, res) => {
+    if (!requireAuth(req, res)) return;
+    const { scope, accountId, label, command } = req.body || {};
+    if (scope !== 'global' && scope !== 'local') {
+      return res.status(400).json({ success: false, error: 'scope must be "global" or "local"' });
+    }
+    const ok = await mccManager.addShortcut(scope, String(label || ''), String(command || ''), scope === 'global' ? undefined : String(accountId || ''));
+    res.json({ success: ok });
+  });
+
+  // Delete a shortcut
+  app.delete('/api/shortcuts', async (req, res) => {
+    if (!requireAuth(req, res)) return;
+    const { scope, accountId, shortcutId } = req.body || {};
+    if (scope !== 'global' && scope !== 'local') {
+      return res.status(400).json({ success: false, error: 'scope must be "global" or "local"' });
+    }
+    const ok = await mccManager.deleteShortcut(scope, String(shortcutId || ''), scope === 'global' ? undefined : String(accountId || ''));
+    res.json({ success: ok });
+  });
+
   const server = http.createServer(app);
   const wss = new WebSocketServer({ server });
 

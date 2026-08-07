@@ -334,54 +334,40 @@ export const MCCConfigEditor: React.FC<MCCConfigEditorProps> = ({
             </span>
           )}
 
-          <div className="flex items-center bg-slate-900 p-1 rounded-xl border border-slate-800 text-xs font-medium">
+          <div className="seg">
             <button
               onClick={() => setActiveTab('visual')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                activeTab === 'visual'
-                  ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/50'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
+              className={`seg-item ${activeTab === 'visual' ? 'seg-item-active' : ''}`}
             >
               <Sliders className="w-3.5 h-3.5" />
-              Giao Diện Trực Quan (Visual)
+              Visual
             </button>
             <button
               onClick={() => setActiveTab('raw')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                activeTab === 'raw'
-                  ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/50'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
+              className={`seg-item ${activeTab === 'raw' ? 'seg-item-active' : ''}`}
             >
               <Code2 className="w-3.5 h-3.5" />
-              Mã Nguồn Thô (Raw INI)
+              Raw INI
             </button>
           </div>
 
           <div className="flex items-center gap-2">
             <button
               onClick={handleAutoFix}
-              className="flex items-center gap-1.5 px-3 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-semibold shadow-md shadow-amber-950/50 cursor-pointer transition-all border border-amber-400/40"
+              className="btn btn-amber"
               title="Tự động kiểm tra và sửa lỗi ngoặc kép, đóng ngoặc section header trong MinecraftClient.ini"
             >
               <Sparkles className="w-4 h-4 text-amber-200 animate-pulse" />
-              🛠️ Sửa Lỗi Cú Pháp Tự Động
+              Sửa Lỗi Tự Động
             </button>
 
             {activeTab === 'visual' ? (
-              <button
-                onClick={handleSaveVisual}
-                className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow-lg shadow-emerald-950/50 cursor-pointer transition-colors"
-              >
+              <button onClick={handleSaveVisual} className="btn btn-primary">
                 <Save className="w-4 h-4" />
                 Lưu Cấu Hình INI
               </button>
             ) : (
-              <button
-                onClick={handleSaveRaw}
-                className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow-lg shadow-emerald-950/50 cursor-pointer transition-colors"
-              >
+              <button onClick={handleSaveRaw} className="btn btn-primary">
                 <Save className="w-4 h-4" />
                 Lưu Raw Text
               </button>
@@ -740,7 +726,7 @@ export const MCCConfigEditor: React.FC<MCCConfigEditorProps> = ({
             </span>
             <button
               onClick={handleSaveRaw}
-              className="flex items-center gap-2 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-xl text-xs shadow-lg shadow-emerald-950/50 cursor-pointer transition-colors"
+              className="btn btn-primary !px-6 !py-2.5"
             >
               <Save className="w-4 h-4" />
               Lưu Raw Text INI

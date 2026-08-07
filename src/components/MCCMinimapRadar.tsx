@@ -85,44 +85,38 @@ export const MCCMinimapRadar: React.FC<MCCMinimapRadarProps> = ({
   const endY = 64 + Math.sin(rad) * lineLength;
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-4 shadow-xl">
+    <div className="panel p-4 space-y-4">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-800">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 panel-header !px-0 !pt-0">
+        <div className="panel-title">
           <Compass className="w-4 h-4 text-cyan-400" />
-          <h3 className="text-xs font-bold text-slate-100 uppercase tracking-wider">
-            Minimap Radar &amp; Tọa Độ Thực (Realtime Coords &amp; Radar)
-          </h3>
+          <span>Minimap Radar &amp; Tọa Độ Thực</span>
         </div>
-        
+
         <div className="flex items-center gap-2">
           <button
             onClick={handleScanCoords}
-            className={`flex items-center gap-1.5 text-xs font-mono font-semibold px-3 py-1 rounded-lg border transition-all cursor-pointer ${
-              isScanning
-                ? 'bg-amber-500/20 border-amber-500/50 text-amber-300 animate-pulse'
-                : 'bg-emerald-600 hover:bg-emerald-500 border-emerald-500 text-white shadow-md'
-            }`}
+            className={`btn ${isScanning ? 'btn-amber' : 'btn-primary'} !px-2.5 !py-1.5`}
           >
             <Crosshair className={`w-3.5 h-3.5 ${isScanning ? 'animate-spin' : ''}`} />
-            {isScanning ? 'Đang Quét Server Packet...' : '📍 Quét Tọa Độ Thật (/position)'}
+            {isScanning ? 'Đang Quét...' : '📍 Quét (/position)'}
           </button>
 
           <button
             onClick={() => onSendCommand('/list')}
-            className="flex items-center gap-1 text-xs font-mono text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 px-2.5 py-1 rounded-lg border border-cyan-500/30 cursor-pointer transition-colors"
+            className="btn btn-ghost !px-2.5 !py-1.5"
             title="Quét danh sách người chơi trên server"
           >
-            <RefreshCw className="w-3.5 h-3.5" /> Quét Tablist (/list)
+            <RefreshCw className="w-3.5 h-3.5" /> /list
           </button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Radar Map Graphic */}
-        <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 flex flex-col items-center justify-center relative overflow-hidden">
+        <div className="surface p-3 flex flex-col items-center justify-center relative overflow-hidden">
           <div className="text-[11px] font-mono font-semibold text-slate-400 mb-2 flex items-center gap-1">
-            <Compass className="w-3.5 h-3.5 text-cyan-400" /> Radar Quét Vùng Lân Cận (128x128)
+            <Compass className="w-3.5 h-3.5 text-cyan-400" /> Radar Quét Vùng Lân Cận
           </div>
 
           <div className="relative w-36 h-36 rounded-full border-2 border-cyan-500/50 bg-[#060e1a] flex items-center justify-center shadow-2xl overflow-hidden">
@@ -186,14 +180,12 @@ export const MCCMinimapRadar: React.FC<MCCMinimapRadarProps> = ({
         </div>
 
         {/* Current Coordinates & Manual Movement / Sync */}
-        <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 flex flex-col justify-between space-y-2">
-          <div className="text-[11px] font-mono font-semibold text-slate-400 flex items-center justify-between">
-            <span className="flex items-center gap-1">
-              <MapPin className="w-3.5 h-3.5 text-emerald-400" /> Tọa Độ Hiện Tại (Coords)
+        <div className="surface p-3 flex flex-col justify-between space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="panel-title !text-[11px] !text-slate-400">
+              <MapPin className="w-3.5 h-3.5 text-emerald-400" /> Tọa Độ Hiện Tại
             </span>
-            <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
-              XYZ Sync
-            </span>
+            <span className="badge badge-amber !text-[9px]">XYZ Sync</span>
           </div>
 
           <div className="grid grid-cols-3 gap-1.5 font-mono text-center">
@@ -211,72 +203,30 @@ export const MCCMinimapRadar: React.FC<MCCMinimapRadarProps> = ({
             </div>
           </div>
 
-          {/* Quick Adjustment Input Controls */}
           <div className="space-y-1.5 pt-1">
-            <span className="text-[10px] font-mono text-slate-400 block">Điều chỉnh / Nhập tọa độ tham chiếu:</span>
+            <span className="text-[10px] font-mono text-slate-400 block">Nhập toạ độ tham chiếu:</span>
             <div className="flex items-center gap-1 font-mono">
-              <input
-                type="number"
-                value={position.x}
-                onChange={(e) => onUpdatePosition({ x: Number(e.target.value) })}
-                className="w-1/3 bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
-                placeholder="X"
-              />
-              <input
-                type="number"
-                value={position.y}
-                onChange={(e) => onUpdatePosition({ y: Number(e.target.value) })}
-                className="w-1/3 bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
-                placeholder="Y"
-              />
-              <input
-                type="number"
-                value={position.z}
-                onChange={(e) => onUpdatePosition({ z: Number(e.target.value) })}
-                className="w-1/3 bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
-                placeholder="Z"
-              />
+              <input type="number" value={position.x} onChange={(e) => onUpdatePosition({ x: Number(e.target.value) })} className="input-sm w-1/3" placeholder="X" />
+              <input type="number" value={position.y} onChange={(e) => onUpdatePosition({ y: Number(e.target.value) })} className="input-sm w-1/3" placeholder="Y" />
+              <input type="number" value={position.z} onChange={(e) => onUpdatePosition({ z: Number(e.target.value) })} className="input-sm w-1/3" placeholder="Z" />
             </div>
 
-            {/* Quick Movement Actions */}
             <div className="flex items-center gap-1 pt-1">
-              <button
-                onClick={() => onSendCommand('/move north')}
-                className="flex-1 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-mono rounded border border-slate-700 cursor-pointer"
-              >
-                ⬆️ North
-              </button>
-              <button
-                onClick={() => onSendCommand('/move south')}
-                className="flex-1 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-mono rounded border border-slate-700 cursor-pointer"
-              >
-                ⬇️ South
-              </button>
-              <button
-                onClick={() => onSendCommand('/move west')}
-                className="flex-1 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-mono rounded border border-slate-700 cursor-pointer"
-              >
-                ⬅️ West
-              </button>
-              <button
-                onClick={() => onSendCommand('/move east')}
-                className="flex-1 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-mono rounded border border-slate-700 cursor-pointer"
-              >
-                ➡️ East
-              </button>
+              <button onClick={() => onSendCommand('/move north')} className="btn btn-ghost flex-1 !py-1 !text-[10px]">⬆️ Bắc</button>
+              <button onClick={() => onSendCommand('/move south')} className="btn btn-ghost flex-1 !py-1 !text-[10px]">⬇️ Nam</button>
+              <button onClick={() => onSendCommand('/move west')} className="btn btn-ghost flex-1 !py-1 !text-[10px]">⬅️ Tây</button>
+              <button onClick={() => onSendCommand('/move east')} className="btn btn-ghost flex-1 !py-1 !text-[10px]">➡️ Đông</button>
             </div>
           </div>
         </div>
 
         {/* Players Nearby & Scoreboard */}
-        <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 flex flex-col justify-between space-y-2">
-          <div className="text-[11px] font-mono font-semibold text-slate-400 flex items-center justify-between">
-            <span className="flex items-center gap-1">
-              <Trophy className="w-3.5 h-3.5 text-amber-400" /> Scoreboard &amp; Player Info
+        <div className="surface p-3 flex flex-col justify-between space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="panel-title !text-[11px] !text-slate-400">
+              <Trophy className="w-3.5 h-3.5 text-amber-400" /> Scoreboard &amp; Người Chơi
             </span>
-            <span className="text-[10px] text-cyan-400 bg-cyan-500/10 px-1.5 py-0.5 rounded border border-cyan-500/20">
-              Live Data
-            </span>
+            <span className="badge badge-cyan !text-[9px]">Live</span>
           </div>
 
           <div className="bg-slate-900/80 border border-slate-800 rounded-lg p-2.5 font-mono text-xs space-y-1 text-slate-300 min-h-[90px]">
@@ -293,10 +243,10 @@ export const MCCMinimapRadar: React.FC<MCCMinimapRadarProps> = ({
 
           <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 pt-1 border-t border-slate-800/80">
             <span className="flex items-center gap-1">
-              <Users className="w-3.5 h-3.5 text-indigo-400" /> Người chơi lân cận:
+              <Users className="w-3.5 h-3.5 text-indigo-400" /> Người chơi lân cận
             </span>
-            <span className="text-indigo-300 font-bold bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
-              {nearbyPlayers.length > 0 ? `${nearbyPlayers.length} Bot/Players` : 'Đang quét...'}
+            <span className="badge badge-indigo">
+              {nearbyPlayers.length > 0 ? `${nearbyPlayers.length} Players` : 'Đang quét...'}
             </span>
           </div>
         </div>

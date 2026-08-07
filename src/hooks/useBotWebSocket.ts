@@ -7,6 +7,7 @@ import {
   WSMessageFromServer,
   AccountSummary,
   AccountProfile,
+  CommandShortcut,
 } from '../types';
 import { getAuthToken, setAuthToken, authQueryString, authHeaders } from '../lib/auth';
 
@@ -38,6 +39,10 @@ export function useBotWebSocket() {
   const [parsedIni, setParsedIni] = useState<Record<string, any>>({});
   const [playerPosition, setPlayerPosition] = useState<PlayerPosition | null>(null);
   const [autoRelog, setAutoRelogState] = useState(false);
+  const [shortcuts, setShortcuts] = useState<{ global: CommandShortcut[]; local: CommandShortcut[] }>({
+    global: [],
+    local: [],
+  });
 
   const wsRef = useRef<WebSocket | null>(null);
 
@@ -90,6 +95,7 @@ export function useBotWebSocket() {
           return;
         }
         setWsConnected(true);
+        send({ type: 'GET_SHORTCUTS' });
       };
 
       socket.onmessage = (event) => {
@@ -122,6 +128,7 @@ export function useBotWebSocket() {
                           serverHost: message.status.serverHost,
                           serverPort: message.status.serverPort,
                           username: message.status.username,
+                          autoRelog: message.status.autoRelog,
                         }
                       : acc
                   )
@@ -142,6 +149,11 @@ export function useBotWebSocket() {
             case 'POSITION_UPDATE':
               if (!message.accountId || message.accountId === activeAccountIdRef.current) {
                 setPlayerPosition(message.position);
+              }
+              break;
+            case 'SHORTCUTS_LIST':
+              if (!message.accountId || message.accountId === activeAccountIdRef.current) {
+                setShortcuts({ global: message.global, local: message.local });
               }
               break;
           }
@@ -189,6 +201,7 @@ export function useBotWebSocket() {
       activeAccountIdRef.current = accountId;
       setLogs([]); // Clear logs when switching views
       send({ type: 'SELECT_ACCOUNT', accountId });
+      send({ type: 'GET_SHORTCUTS' });
     },
     [send]
   );
@@ -218,6 +231,27 @@ export function useBotWebSocket() {
     send({ type: 'START_MCC', accountId: activeAccountIdRef.current });
   }, [send]);
 
+  const startMccFor = useCallback(
+    (accountId: string) => {
+      send({ type: 'START_MCC', accountId });
+    },
+    [send]
+  );
+
+  const stopMccFor = useCallback(
+    (accountId: string) => {
+      send({ type: 'STOP_MCC', accountId });
+    },
+    [send]
+  );
+
+  const setAutoRelogFor = useCallback(
+    (accountId: string, enabled: boolean) => {
+      send({ type: 'SET_AUTORELOG', enabled, accountId });
+    },
+    [send]
+  );
+
   const stopMCC = useCallback(() => {
     send({ type: 'STOP_MCC', accountId: activeAccountIdRef.current });
   }, [send]);
@@ -236,6 +270,28 @@ export function useBotWebSocket() {
   const sendChat = useCallback(
     (message: string) => {
       send({ type: 'SEND_CHAT', message, accountId: activeAccountIdRef.current });
+    },
+    [send]
+  );
+
+  /** Gửi cùng 1 lệnh cho nhiều bot, giãn cách staggerMs giữa các bot để tránh kick rate-limit */
+  const broadcastCommand = useCallback(
+    (accountIds: string[], command: string, staggerMs = 5000) => {
+      send({ type: 'BROADCAST_COMMAND', command, accountIds, staggerMs });
+    },
+    [send]
+  );
+
+  const broadcastStart = useCallback(
+    (accountIds: string[], staggerMs = 5000) => {
+      send({ type: 'BROADCAST_START', accountIds, staggerMs });
+    },
+    [send]
+  );
+
+  const broadcastStop = useCallback(
+    (accountIds: string[]) => {
+      send({ type: 'BROADCAST_STOP', accountIds });
     },
     [send]
   );
@@ -289,6 +345,28 @@ export function useBotWebSocket() {
     setLogs([]);
   }, []);
 
+  const addShortcut = useCallback(
+    (scope: 'global' | 'local', label: string, command: string) => {
+      if (scope === 'global') {
+        send({ type: 'ADD_SHORTCUT', scope, label, command });
+      } else {
+        send({ type: 'ADD_SHORTCUT', scope, accountId: activeAccountIdRef.current, label, command });
+      }
+    },
+    [send]
+  );
+
+  const deleteShortcut = useCallback(
+    (scope: 'global' | 'local', shortcutId: string) => {
+      if (scope === 'global') {
+        send({ type: 'DELETE_SHORTCUT', scope, shortcutId });
+      } else {
+        send({ type: 'DELETE_SHORTCUT', scope, accountId: activeAccountIdRef.current, shortcutId });
+      }
+    },
+    [send]
+  );
+
   return {
     wsConnected,
     accounts,
@@ -306,8 +384,14 @@ export function useBotWebSocket() {
     startMCC,
     stopMCC,
     restartMCC,
+    startMccFor,
+    stopMccFor,
+    setAutoRelogFor,
     sendCommand,
     sendChat,
+    broadcastCommand,
+    broadcastStart,
+    broadcastStop,
     saveIni,
     autoFixIni,
     enableSilentMode,
@@ -315,6 +399,9 @@ export function useBotWebSocket() {
     autoRelog,
     updateServerAccount,
     clearLogs,
+    shortcuts,
+    addShortcut,
+    deleteShortcut,
   };
 }
 

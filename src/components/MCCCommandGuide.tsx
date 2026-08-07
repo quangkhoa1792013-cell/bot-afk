@@ -23,10 +23,12 @@ export const MCCCommandGuide: React.FC<MCCCommandGuideProps> = ({ onSendCommand 
   ];
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
-      <div className="flex items-center gap-2 pb-3 border-b border-slate-800">
-        <BookOpen className="w-5 h-5 text-indigo-400" />
-        <h3 className="text-sm font-bold text-slate-100">Minecraft Console Client (MCC) Commands Quick Guide</h3>
+    <div className="panel p-5 space-y-4">
+      <div className="panel-header !px-0 !pt-0">
+        <div className="panel-title">
+          <BookOpen className="w-5 h-5 text-indigo-400" />
+          <span>Hướng Dẫn Lệnh MCC</span>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -41,7 +43,7 @@ export const MCCCommandGuide: React.FC<MCCCommandGuideProps> = ({ onSendCommand 
             </div>
             <button
               onClick={() => onSendCommand(item.cmd)}
-              className="px-2.5 py-1 bg-slate-800 hover:bg-emerald-600 text-slate-300 hover:text-white text-xs font-mono rounded-md shrink-0 cursor-pointer transition-colors flex items-center gap-1"
+              className="btn btn-ghost !px-2.5 !py-1 shrink-0"
             >
               <Send className="w-3 h-3" />
               Run

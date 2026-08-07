@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useBotWebSocket } from './hooks/useBotWebSocket';
 import { MCCHeader } from './components/MCCHeader';
 import { MCCAccountSelector } from './components/MCCAccountSelector';
@@ -8,7 +8,23 @@ import { MCCMovementPanel } from './components/MCCMovementPanel';
 import { MCCConfigEditor } from './components/MCCConfigEditor';
 import { MCCCommandGuide } from './components/MCCCommandGuide';
 import { MCCMapCaptchaPanel } from './components/MCCMapCaptchaPanel';
-import { Terminal, Sliders, BookOpen, Server, Navigation, Compass, Map, ShieldAlert } from 'lucide-react';
+import { MCCShortcutManager } from './components/MCCShortcutManager';
+import { MCCDashboard } from './components/MCCDashboard';
+import {
+  LayoutDashboard, Terminal, Map, Sliders, BookOpen, Zap, ShieldAlert,
+  MoreVertical, ChevronDown, Server, MapPin,
+} from 'lucide-react';
+
+type TabKey = 'dashboard' | 'console' | 'captcha' | 'config' | 'guide' | 'shortcuts';
+
+const TAB_LABELS: Record<TabKey, string> = {
+  dashboard: 'Dashboard',
+  console: 'Bảng Điều Khiển',
+  captcha: 'Map Captcha',
+  config: 'Cấu Hình INI',
+  guide: 'Hướng Dẫn Lệnh',
+  shortcuts: 'Phím Tắt Lệnh',
+};
 
 export default function App() {
   const {
@@ -34,9 +50,32 @@ export default function App() {
     autoRelog,
     updateServerAccount,
     clearLogs,
+    shortcuts,
+    addShortcut,
+    deleteShortcut,
+    broadcastCommand,
+    broadcastStart,
+    broadcastStop,
+    startMccFor,
+    stopMccFor,
+    setAutoRelogFor,
   } = useBotWebSocket();
 
-  const [activeTab, setActiveTab] = useState<'console' | 'captcha' | 'config' | 'guide'>('console');
+  const [activeTab, setActiveTab] = useState<TabKey>('dashboard');
+  const [showShortcutManager, setShowShortcutManager] = useState(false);
+  const [extrasOpen, setExtrasOpen] = useState(false);
+  const extrasRef = useRef<HTMLDivElement>(null);
+
+  // Close the "more tabs" dropdown when clicking outside
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (extrasRef.current && !extrasRef.current.contains(e.target as Node)) {
+        setExtrasOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, []);
 
   // Check if captcha keyword was recently received
   const hasCaptchaAlert = useMemo(() => {
@@ -80,99 +119,124 @@ export default function App() {
     setPosition((prev) => ({ ...prev, ...newPos }));
   }, []);
 
+  const setTab = (tab: TabKey) => {
+    setActiveTab(tab);
+    setExtrasOpen(false);
+  };
+
+  // Primary tabs row: dashboard, console, captcha (core) + extras dropdown
+  const coreTabs: TabKey[] = ['dashboard', 'console'];
+  const extraTabs: TabKey[] = ['config', 'guide', 'shortcuts'];
+
+  const renderTabButton = (tab: TabKey, icon: React.ReactNode, extra?: React.ReactNode) => (
+    <button
+      key={tab}
+      onClick={() => setActiveTab(tab)}
+      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
+        activeTab === tab
+          ? 'bg-emerald-600/15 text-emerald-300 border border-emerald-500/40'
+          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent'
+      }`}
+    >
+      {icon} {TAB_LABELS[tab]}
+      {extra}
+    </button>
+  );
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 flex flex-col font-sans selection:bg-emerald-600 selection:text-white">
-      {/* MCC Header Bar */}
-      <MCCHeader
-        status={mccStatus}
-        wsConnected={wsConnected}
-        hasBot={accounts.length > 0}
-        autoRelog={autoRelog}
-        onStart={startMCC}
-        onStop={stopMCC}
-        onRestart={restartMCC}
-        onToggleAutoRelog={setAutoRelog}
-      />
+      {activeTab !== 'dashboard' && (
+        <MCCHeader
+          status={mccStatus}
+          wsConnected={wsConnected}
+          hasBot={accounts.length > 0}
+          autoRelog={autoRelog}
+          onStart={startMCC}
+          onStop={stopMCC}
+          onRestart={restartMCC}
+          onToggleAutoRelog={setAutoRelog}
+        />
+      )}
 
-      {/* Account Selector Bar */}
-      <MCCAccountSelector
-        accounts={accounts}
-        activeAccountId={activeAccountId}
-        scripts={scripts}
-        onSelectAccount={selectAccount}
-        onAddAccount={addAccount}
-        onDeleteAccount={deleteAccount}
-        onStartMCC={startMCC}
-        onStopMCC={stopMCC}
-      />
+      {activeTab !== 'dashboard' && (
+        <MCCAccountSelector
+          accounts={accounts}
+          activeAccountId={activeAccountId}
+          scripts={scripts}
+          onSelectAccount={selectAccount}
+          onAddAccount={addAccount}
+          onDeleteAccount={deleteAccount}
+        />
+      )}
 
-      {/* Main Container */}
       <main className="max-w-[1700px] w-full mx-auto p-4 flex-1 flex flex-col gap-4">
-        {/* Navigation Tabs Bar */}
-        <div className="flex flex-wrap items-center justify-between border-b border-slate-800 pb-3 gap-3">
-          <div className="flex items-center gap-2 bg-slate-900 p-1 rounded-xl border border-slate-800 text-xs font-medium">
-            <button
-              onClick={() => setActiveTab('console')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors cursor-pointer ${
-                activeTab === 'console'
-                  ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/50'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-              }`}
-            >
-              <Terminal className="w-4 h-4" />
-              <span>Bảng Điều Khiển &amp; Minimap</span>
-            </button>
+        {/* Navigation Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
+          <div className="flex items-center gap-1">
+            {coreTabs.map((tab) =>
+              renderTabButton(tab, tab === 'dashboard' ? <LayoutDashboard className="w-3.5 h-3.5" /> : <Terminal className="w-3.5 h-3.5" />)
+            )}
 
             <button
               onClick={() => setActiveTab('captcha')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors cursor-pointer relative ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer relative border ${
                 activeTab === 'captcha'
-                  ? 'bg-amber-600 text-white font-semibold shadow-md shadow-amber-950/50'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                  ? 'bg-amber-600/15 text-amber-300 border-amber-500/40'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border-transparent'
               }`}
             >
-              <Map className="w-4 h-4 text-amber-300" />
-              <span>Giải Mã Map Captcha</span>
+              <Map className="w-3.5 h-3.5" />
+              Map Captcha
               {hasCaptchaAlert && (
                 <span className="flex h-2 w-2 relative">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
                 </span>
               )}
             </button>
 
-            <button
-              onClick={() => setActiveTab('config')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors cursor-pointer ${
-                activeTab === 'config'
-                  ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/50'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-              }`}
-            >
-              <Sliders className="w-4 h-4" />
-              <span>Chỉnh Sửa Cấu Hình INI</span>
-            </button>
+            {/* More tools dropdown */}
+            <div className="relative" ref={extrasRef}>
+              <button
+                onClick={() => setExtrasOpen((v) => !v)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent"
+              >
+                <MoreVertical className="w-3.5 h-3.5" />
+                Thêm
+                <ChevronDown className="w-3 h-3" />
+              </button>
 
-            <button
-              onClick={() => setActiveTab('guide')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors cursor-pointer ${
-                activeTab === 'guide'
-                  ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/50'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-              }`}
-            >
-              <BookOpen className="w-4 h-4" />
-              <span>Hướng Dẫn Lệnh MCC</span>
-            </button>
+              {extrasOpen && (
+                <div className="absolute right-0 mt-2 z-50 w-52 rounded-xl bg-slate-900 border border-slate-700 shadow-2xl overflow-hidden">
+                  {extraTabs.map((tab) => (
+                    <button
+                      key={tab}
+                      onClick={() => setTab(tab)}
+                      className={`flex items-center gap-2.5 px-4 py-2.5 w-full text-left text-xs transition-colors cursor-pointer border-b border-slate-800/60 last:border-b-0 ${
+                        activeTab === tab
+                          ? 'bg-emerald-600/15 text-emerald-300'
+                          : 'text-slate-300 hover:bg-slate-800'
+                      }`}
+                    >
+                      {tab === 'config' ? <Sliders className="w-4 h-4" /> : tab === 'guide' ? <BookOpen className="w-4 h-4" /> : <Zap className="w-4 h-4" />}
+                      {TAB_LABELS[tab]}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
-          <div className="hidden sm:flex items-center gap-3 text-xs font-mono text-slate-400">
-            <span className="flex items-center gap-1">
-              <Server className="w-3.5 h-3.5 text-indigo-400" />
-              {mccStatus.serverHost}:{mccStatus.serverPort}
-            </span>
-            <span className="text-slate-600">•</span>
-            <span className="text-emerald-400 font-semibold">Tọa độ: X:{position.x} Y:{position.y} Z:{position.z}</span>
+          {/* Right side: live coords badge */}
+          <div className="hidden sm:flex items-center gap-2 text-xs font-mono text-slate-400">
+            <button
+              onClick={() => setActiveTab('console')}
+              className="badge badge-indigo cursor-pointer hover:bg-indigo-500/20"
+              title="Xem chi tiết toạ độ ở tab Bảng Điều Khiển"
+            >
+              <MapPin className="w-3 h-3" />
+              X {position.x} · Y {position.y} · Z {position.z}
+            </button>
           </div>
         </div>
 
@@ -181,22 +245,41 @@ export default function App() {
           <div className="bg-amber-950/80 border border-amber-500/50 p-3 rounded-xl flex items-center justify-between text-xs font-mono text-amber-200 animate-pulse">
             <div className="flex items-center gap-2">
               <ShieldAlert className="w-4 h-4 text-amber-400" />
-              <span>Phát hiện thông báo Captcha từ Server! Mở tab Giải Mã Map Captcha để xử lý ngay.</span>
+              <span>Phát hiện thông báo Captcha từ Server! Mở tab Map Captcha để xử lý ngay.</span>
             </div>
             <button
               onClick={() => setActiveTab('captcha')}
               className="px-3 py-1 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded cursor-pointer transition-colors"
             >
-              Mở Tab Map Captcha →
+              Mở Tab →
             </button>
           </div>
         )}
 
-        {/* Tab View Contents */}
+        {/* Tab Contents */}
         <div className="flex-1 flex flex-col gap-4">
+          {activeTab === 'dashboard' && (
+            <MCCDashboard
+              accounts={accounts}
+              onSelectAccount={selectAccount}
+              onEnterBot={(accountId) => {
+                selectAccount(accountId);
+                setActiveTab('console');
+              }}
+              onBroadcastCommand={broadcastCommand}
+              onBroadcastStart={broadcastStart}
+              onBroadcastStop={broadcastStop}
+              onStartMcc={startMccFor}
+              onStopMcc={stopMccFor}
+              onToggleAutoRelog={setAutoRelogFor}
+              onDeleteBot={deleteAccount}
+              scripts={scripts}
+              onAddBot={addAccount}
+            />
+          )}
+
           {activeTab === 'console' && (
             <div className="flex flex-col gap-4">
-              {/* Top Row: Minimap Radar & Movement System */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <MCCMinimapRadar
                   position={position}
@@ -212,12 +295,13 @@ export default function App() {
                 />
               </div>
 
-              {/* Bottom Row: Moderately sized, scrollable Live Terminal Log */}
               <MCCTerminal
                 logs={logs}
                 onSendCommand={sendCommand}
                 onClearLogs={clearLogs}
                 isMccRunning={mccStatus.running}
+                shortcuts={shortcuts}
+                onManageShortcuts={() => setShowShortcutManager(true)}
               />
             </div>
           )}
@@ -252,20 +336,45 @@ export default function App() {
               <MCCCommandGuide onSendCommand={sendCommand} />
             </div>
           )}
+
+          {activeTab === 'shortcuts' && (
+            <div className="flex-1">
+              <MCCShortcutManager
+                open={true}
+                onClose={() => setShowShortcutManager(false)}
+                shortcuts={shortcuts}
+                onAddShortcut={addShortcut}
+                onDeleteShortcut={deleteShortcut}
+                accountName={
+                  accounts.find((a) => a.id === activeAccountId)?.name || activeAccountId || '...'
+                }
+                variant="inline"
+              />
+            </div>
+          )}
         </div>
       </main>
 
-      {/* Footer */}
       <footer className="bg-slate-900 border-t border-slate-800 py-3 px-6 text-xs text-slate-500 font-mono flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span>Minecraft Console Client (MCC) - Web UI Engine</span>
+          <span>MCC Console Client — Web Control Engine</span>
         </div>
         <div>
           Server: <span className="text-slate-300 font-bold">{mccStatus.username} @ {mccStatus.serverHost}:{mccStatus.serverPort}</span>
         </div>
       </footer>
+
+      <MCCShortcutManager
+        open={showShortcutManager}
+        onClose={() => setShowShortcutManager(false)}
+        shortcuts={shortcuts}
+        onAddShortcut={addShortcut}
+        onDeleteShortcut={deleteShortcut}
+        accountName={
+          accounts.find((a) => a.id === activeAccountId)?.name || activeAccountId || '...'
+        }
+      />
     </div>
   );
 }
-

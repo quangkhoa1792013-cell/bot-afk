@@ -1,1 +1,164 @@
 @import "tailwindcss";
+
+/* ============================================================
+   Design System — nhất quán toàn bộ giao diện MCC Web UI
+   One accent (emerald) + semantic (amber/rose/indigo) only.
+   ============================================================ */
+
+:root {
+  color-scheme: dark;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  @apply bg-slate-950 text-slate-200 antialiased;
+  font-family: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+code, pre, .font-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+/* ---------- Panels / cards ---------- */
+.panel {
+  @apply bg-slate-900 border border-slate-800 rounded-xl shadow-lg;
+}
+.panel-header {
+  @apply flex items-center justify-between gap-2 px-4 py-3 border-b border-slate-800;
+}
+.panel-title {
+  @apply text-xs font-bold text-slate-100 tracking-wide flex items-center gap-2;
+}
+.panel-sub {
+  @apply text-[11px] text-slate-400;
+}
+.panel-body {
+  @apply p-4;
+}
+.surface {
+  @apply bg-slate-950 border border-slate-800 rounded-lg;
+}
+
+/* ---------- Buttons ---------- */
+.btn {
+  @apply inline-flex items-center justify-center gap-1.5 text-xs font-semibold rounded-lg px-3 py-2 transition-all cursor-pointer select-none disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none;
+}
+.btn-primary {
+  @apply bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-950/40 active:scale-[0.98] inline-flex items-center justify-center gap-1.5 text-xs font-semibold rounded-lg px-3 py-2 transition-all cursor-pointer select-none disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none;
+}
+.btn-danger {
+  @apply bg-rose-600 hover:bg-rose-500 text-white shadow-sm shadow-rose-950/40 active:scale-[0.98] inline-flex items-center justify-center gap-1.5 text-xs font-semibold rounded-lg px-3 py-2 transition-all cursor-pointer select-none disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none;
+}
+.btn-amber {
+  @apply bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 active:scale-[0.98] inline-flex items-center justify-center gap-1.5 text-xs font-semibold rounded-lg px-3 py-2 transition-all cursor-pointer select-none disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none;
+}
+.btn-ghost {
+  @apply bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 active:scale-[0.98] inline-flex items-center justify-center gap-1.5 text-xs font-semibold rounded-lg px-3 py-2 transition-all cursor-pointer select-none disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none;
+}
+.btn-muted {
+  @apply bg-transparent hover:bg-slate-800 text-slate-400 hover:text-slate-200 inline-flex items-center justify-center gap-1.5 text-xs font-semibold rounded-lg px-3 py-2 transition-all cursor-pointer select-none disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none;
+}
+.btn-icon {
+  @apply p-1.5 rounded-md text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors cursor-pointer;
+}
+
+/* ---------- Segmented control ---------- */
+.seg {
+  @apply inline-flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800 text-xs font-medium;
+}
+.seg-item {
+  @apply flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors cursor-pointer text-slate-400 hover:text-slate-200;
+}
+.seg-item-active {
+  @apply bg-emerald-600 text-white font-semibold shadow-sm shadow-emerald-950/50 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors cursor-pointer;
+}
+
+/* ---------- Badges ---------- */
+.badge-green {
+  @apply inline-flex items-center gap-1 text-[10px] font-mono font-semibold px-2 py-0.5 rounded border text-emerald-400 bg-emerald-500/10 border-emerald-500/30;
+}
+.badge-red {
+  @apply inline-flex items-center gap-1 text-[10px] font-mono font-semibold px-2 py-0.5 rounded border text-rose-400 bg-rose-500/10 border-rose-500/30;
+}
+.badge-amber {
+  @apply inline-flex items-center gap-1 text-[10px] font-mono font-semibold px-2 py-0.5 rounded border text-amber-400 bg-amber-500/10 border-amber-500/30;
+}
+.badge-indigo {
+  @apply inline-flex items-center gap-1 text-[10px] font-mono font-semibold px-2 py-0.5 rounded border text-indigo-400 bg-indigo-500/10 border-indigo-500/30;
+}
+.badge-cyan {
+  @apply inline-flex items-center gap-1 text-[10px] font-mono font-semibold px-2 py-0.5 rounded border text-cyan-400 bg-cyan-500/10 border-cyan-500/30;
+}
+.badge-slate {
+  @apply inline-flex items-center gap-1 text-[10px] font-mono font-semibold px-2 py-0.5 rounded border text-slate-400 bg-slate-800 border-slate-700;
+}
+
+.dot {
+  @apply inline-block w-2 h-2 rounded-full;
+}
+.dot-on {
+  @apply inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse;
+}
+.dot-off {
+  @apply inline-block w-2 h-2 rounded-full bg-rose-500;
+}
+
+/* ---------- Inputs / selects ---------- */
+.input {
+  @apply w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 transition-all;
+}
+.input-mono {
+  @apply w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 transition-all font-mono;
+}
+.input-sm {
+  @apply w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 transition-all;
+}
+.select {
+  @apply w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 transition-all cursor-pointer appearance-none;
+}
+.label {
+  @apply block text-[11px] font-semibold text-slate-400 mb-1;
+}
+
+/* ---------- Table ---------- */
+.table-wrap {
+  @apply bg-slate-900 border border-slate-800 rounded-xl shadow-lg overflow-hidden;
+}
+.table {
+  @apply w-full text-left text-xs;
+}
+.table thead {
+  @apply bg-slate-950/70 text-slate-400 font-mono uppercase text-[10px];
+}
+.table thead th {
+  @apply px-3 py-2.5 font-semibold border-b border-slate-800;
+}
+.table tbody {
+  @apply divide-y divide-slate-800/60;
+}
+.table tbody td {
+  @apply px-3 py-2.5;
+}
+.table tbody tr {
+  @apply hover:bg-slate-800/40 transition-colors;
+}
+.table tbody tr.row-selected {
+  @apply bg-emerald-950/30;
+}
+
+/* ---------- Misc ---------- */
+.empty {
+  @apply flex flex-col items-center justify-center text-slate-500 py-12 gap-2 text-sm;
+}
+.stat {
+  @apply bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-center;
+}
+.stat-value {
+  @apply text-lg font-black text-slate-100;
+}
+.stat-label {
+  @apply text-[10px] text-slate-500 font-mono uppercase tracking-wide;
+}
