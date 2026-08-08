@@ -1,0 +1,20 @@
+[2026/08/08 22:41:59:5698] N: ttyd 1.7.7-40e79c7 (libwebsockets 4.5.8-unknown)
+[2026/08/08 22:41:59:5698] N: tty configuration:
+[2026/08/08 22:41:59:5698] N:   start command: bash -c while true; do tmux attach-session -t mc_bots 2>/dev/null || (clear && echo '=== CHO BOT KHOI CHAY ===' && sleep 2); done
+[2026/08/08 22:41:59:5698] N:   close signal: SIGHUP (1)
+[2026/08/08 22:41:59:5699] N:   terminal type: xterm-256color
+[2026/08/08 22:41:59:5740] N: lws_create_context: LWS: 4.5.8-unknown, NET CLI SRV H1 H2 WS SS-JSON-POL ConMon IPV6-off
+[2026/08/08 22:41:59:5747] N: elops_init_pt_uv:  Using foreign event loop...
+[2026/08/08 22:41:59:5753] W: [null wsi]: lws_socket_bind: setsockopt bind to device 0.0.0.0 error fd 13 (19)
+[2026/08/08 22:41:59:5753] N: [vh|3|default|0.0.0.0|0.0.0.0|7681]: lws_socket_bind: source ads 0.0.0.0
+[2026/08/08 22:41:59:5754] N:  Listening on port: 7681
+[2026/08/08 22:42:10:7634] N: HTTP / - 127.0.0.1
+[2026/08/08 22:42:11:4280] N: HTTP /token - 127.0.0.1
+[2026/08/08 22:42:11:4994] N: WS   /ws - 127.0.0.1, clients: 1
+[2026/08/08 22:42:11:5028] N: started process, pid: 7647
+[2026/08/09 01:43:28:1077] N: HTTP / - 127.0.0.1
+[2026/08/09 01:43:28:1242] N: WS closed from 127.0.0.1, clients: 0
+[2026/08/09 01:43:28:1262] N: killing process, pid: 7647
+[2026/08/09 01:43:28:9596] N: HTTP /token - 127.0.0.1
+[2026/08/09 01:43:29:0729] N: WS   /ws - 127.0.0.1, clients: 1
+[2026/08/09 01:43:29:0891] N: started process, pid: 45947
