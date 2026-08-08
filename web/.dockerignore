@@ -1,0 +1,12 @@
+# KHÔNG đưa các file sau vào image Docker (Render) — tránh lộ secret
+config.json
+config.example.json
+logs/
+__pycache__/
+**/__pycache__/
+*.pyc
+*.log
+captcha_submit.txt
+node_modules/
+.venv/
+.git/

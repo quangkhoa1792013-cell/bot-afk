@@ -19,7 +19,25 @@ const CONFIG_FILE = path.join(__dirname, 'config.json');
 const SUBMIT_FILE = path.join(__dirname, 'captcha_submit.txt');
 const DUMP_DIR = path.join(__dirname, '..', 'captcha_dumps');
 
-const config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
+/* Cấu hình: Env vars ưu tiên hơn config.json (giống web/app.py)
+   - Local: config.json
+   - Render: DISCORD_TOKEN, DISCORD_CHANNEL_ID, DISCORD_USERNAME... (Secret) */
+const config = (() => {
+  const fileCfg = {};
+  if (fs.existsSync(CONFIG_FILE)) {
+    try { Object.assign(fileCfg, JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'))); } catch (e) {}
+  }
+  return {
+    server: process.env.SERVER || fileCfg.server || 'aquamc.vn',
+    port: parseInt(process.env.MC_PORT || fileCfg.port || 25565, 10),
+    version: process.env.MC_VERSION || fileCfg.version || '1.20.1',
+    username: process.env.DISCORD_USERNAME || fileCfg.username || 'Sonar',
+    captcha_command: process.env.CAPTCHA_COMMAND || fileCfg.captcha_command || '/captcha {code}',
+    discord_token: process.env.DISCORD_TOKEN || fileCfg.discord_token || '',
+    discord_channel_id: process.env.DISCORD_CHANNEL_ID || fileCfg.discord_channel_id || '',
+    discord_prefix: process.env.DISCORD_PREFIX || fileCfg.discord_prefix || '!submit',
+  };
+})();
 const now = () => new Date().toLocaleTimeString();
 
 if (!fs.existsSync(DUMP_DIR)) fs.mkdirSync(DUMP_DIR);

@@ -1,17 +1,19 @@
+# Python
+__pycache__/
+**/__pycache__/
+*.pyc
+
+# Local data
 run.log
+web_dash.log
 web_log.txt
 captcha_dumps/
 node_modules/
 .venv/
-__pycache__/
-*.pyc
-web/__pycache__/
+.freebuff/
+
+# Web runtime (không push lên Git/Render)
 web/config.json
 web/captcha_submit.txt
 web/captcha_discord.log
 web/logs/
-web_dash.log
-logs/
-
-
-.freebuff/

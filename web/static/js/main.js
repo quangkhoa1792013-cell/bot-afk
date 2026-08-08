@@ -223,6 +223,12 @@
   function applyStatus() {
     const s = statusData;
     if (!s) return;
+    const ctlHint = $("#ctl-hint");
+    if (ctlHint) {
+      ctlHint.innerHTML = s.mode === "local"
+        ? "💡 Máy LOCAL — điều khiển trực tiếp <code>run.sh</code> + dàn bot thật. Dùng các nút để bấm nhanh."
+        : "💡 Bản DEMO/RENDER — không có run.sh, chỉ xem giao diện. Điều khiển bot thật ở máy local (http://localhost:7860).";
+    }
     setPill("pill-bots", s.bots, s.bots ? "Bots: chạy" : "Bots: tắt");
     setPill("pill-terminal", s.terminal, `Terminal: ${s.terminal ? "chạy" : "tắt"}`);
     setPill("pill-discord", s.discord, `Discord: ${s.discord ? "chạy" : "tắt"}`);

@@ -28,6 +28,33 @@ CAPTCHA_DIR = os.path.join(PROJECT_ROOT, "captcha_dumps")
 BOT_LOGS_DIR = os.path.join(WEB_DIR, "logs", "bots")
 SESSION = "mc_bots"
 TTYD_PORT = 7681
+RUN_SH = os.path.join(PROJECT_ROOT, "run.sh")
+
+
+def load_config():
+    """Cấu hình: Env vars (Render) ưu tiên hơn config.json (máy local).
+
+    Render không có config.json -> chỉ cần set env:
+      DISCORD_TOKEN, DISCORD_CHANNEL_ID, DISCORD_USERNAME, DISCORD_PREFIX, SERVER
+    """
+    cfg = {}
+    try:
+        with open(CONFIG_FILE, encoding="utf-8") as f:
+            cfg = json.load(f) or {}
+    except Exception:
+        pass
+    return {
+        "discord_token": os.environ.get("DISCORD_TOKEN", cfg.get("discord_token", "")),
+        "discord_channel_id": os.environ.get("DISCORD_CHANNEL_ID", cfg.get("discord_channel_id", "")),
+        "username": os.environ.get("DISCORD_USERNAME", cfg.get("username", "")),
+        "discord_prefix": os.environ.get("DISCORD_PREFIX", cfg.get("discord_prefix", "!submit")),
+        "server": os.environ.get("SERVER", cfg.get("server", "aquamc.vn")),
+    }
+
+
+def has_runsh():
+    """Máy local có run.sh (điều khiển bot thật). Render chỉ có web/ -> chế độ demo."""
+    return os.path.exists(RUN_SH)
 
 app = Flask(__name__,
             template_folder=os.path.join(WEB_DIR, "templates"),
@@ -44,7 +71,9 @@ def run(cmd):
 
 
 def cleanup_stale_runsh():
-    """Dọn run.sh rác còn sót từ lần chạy trước (gây loạn terminal/menu)"""
+    """Dọn run.sh rác còn sót từ lần chạy trước (chỉ máy local)"""
+    if not has_runsh():
+        return
     run("pkill -f '[b]ash run.sh'")
     time.sleep(0.6)
 
@@ -118,6 +147,11 @@ class TerminalManager:
 
     def start(self):
         if self.alive:
+            return
+        if not has_runsh():
+            # Render / bản demo: không có run.sh local -> không spawn, báo rõ ràng
+            self._feed("\x1b[31m[WEB] Không tìm thấy run.sh — đây là bản DEMO/REMOTE (Render).\x1b[0m\r\n"
+                       "\x1b[31m[WEB] Terminal và điều khiển bot CHỈ hoạt động trên máy local.\x1b[0m\r\n")
             return
         proc = self.ptyprocess.PtyProcess.spawn(
             ["bash", "run.sh"],
@@ -196,6 +230,11 @@ def drive_runsh(action, delay=0.9):
     def _run():
         with TM.lock:
             try:
+                if not has_runsh():
+                    EVENTS.push("term", {"type": "out", "data": (
+                        f"\x1b[31m[WEB] Không thể '{action}': thiếu run.sh "
+                        f"(bản demo/remote — chỉ máy local mới điều khiển được bot).\x1b[0m\r\n")})
+                    return
                 TM.start()
                 if TM.alive:
                     TM.write(f"\x1b[38;5;208m[WEB] Đang thực hiện: {action}...\x1b[0m\r\n")
@@ -383,6 +422,7 @@ def status_dict():
         disk = "?"
     accounts = load_accounts()
     return {
+        "mode": "local" if has_runsh() else "remote",
         "bots": bool(bots and bots.stdout.strip() == "yes"),
         "web": bool(web and web.stdout.strip() == "yes"),
         "terminal": TM.alive,
@@ -494,6 +534,8 @@ def api_bot_chat():
 
 @app.route("/api/accounts/toggle", methods=["POST"])
 def api_accounts_toggle():
+    if not os.path.exists(ACCOUNTS_FILE):
+        return jsonify({"ok": False, "error": "Chế độ demo/remote — không có accounts.json (chỉ máy local dùng được)"}), 400
     data = request.get_json(silent=True) or {}
     name = data.get("name")
     if not name:
@@ -509,6 +551,8 @@ def api_accounts_toggle():
 
 @app.route("/api/accounts/add", methods=["POST"])
 def api_accounts_add():
+    if not os.path.exists(ACCOUNTS_FILE):
+        return jsonify({"ok": False, "error": "Chế độ demo/remote — không có accounts.json (chỉ máy local dùng được)"}), 400
     data = request.get_json(silent=True) or {}
     name = (data.get("name") or "").strip()
     if not name:
@@ -536,6 +580,8 @@ def api_accounts_add():
 
 @app.route("/api/accounts/delete", methods=["POST"])
 def api_accounts_delete():
+    if not os.path.exists(ACCOUNTS_FILE):
+        return jsonify({"ok": False, "error": "Chế độ demo/remote — không có accounts.json (chỉ máy local dùng được)"}), 400
     data = request.get_json(silent=True) or {}
     name = data.get("name")
     accounts = load_accounts()
@@ -548,6 +594,8 @@ def api_accounts_delete():
 
 @app.route("/api/terminal/action", methods=["POST"])
 def api_terminal_action():
+    if not has_runsh():
+        return jsonify({"ok": False, "error": "Chế độ demo/remote — không có run.sh, không điều khiển bot được"}), 400
     data = request.get_json(silent=True) or {}
     action = data.get("action")
     if action not in MENU_ACTIONS:
@@ -594,6 +642,8 @@ def api_captchas():
 
 @app.route("/api/captcha/submit", methods=["POST"])
 def api_captcha_submit():
+    if not os.path.exists(os.path.join(WEB_DIR, "captcha_discord.js")) or not shutil.which("node"):
+        return jsonify({"ok": False, "error": "Chế độ demo/remote — gửi mã chỉ hoạt động trên máy local"}), 400
     data = request.get_json(silent=True) or {}
     code = (data.get("code") or "").strip()
     if not code:
@@ -616,11 +666,7 @@ def captcha_bridge_running():
 
 
 def captcha_account():
-    try:
-        with open(CONFIG_FILE, encoding="utf-8") as f:
-            return (json.load(f) or {}).get("username", "?")
-    except Exception:
-        return "?"
+    return load_config().get("username") or "?"
 
 
 @app.route("/api/captcha/bridge", methods=["POST"])
@@ -630,6 +676,8 @@ def api_captcha_bridge():
     if action == "start":
         if captcha_bridge_running():
             return jsonify({"ok": False, "error": "Bridge captcha đang chạy rồi"}), 400
+        if not os.path.exists(os.path.join(WEB_DIR, "captcha_discord.js")) or not shutil.which("node"):
+            return jsonify({"ok": False, "error": "Thiếu node hoặc captcha_discord.js — bridge chỉ hoạt động trên máy local"}), 400
         try:
             with open(os.path.join(WEB_DIR, "captcha_discord.log"), "ab") as f:
                 subprocess.Popen(
