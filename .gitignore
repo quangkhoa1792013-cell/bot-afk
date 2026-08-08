@@ -1,0 +1,17 @@
+run.log
+web_log.txt
+captcha_dumps/
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+web/__pycache__/
+web/config.json
+web/captcha_submit.txt
+web/captcha_discord.log
+web/logs/
+web_dash.log
+logs/
+
+
+.freebuff/

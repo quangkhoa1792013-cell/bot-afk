@@ -1,0 +1,4 @@
+wait 9
+send /login khoalaptrinh
+wait 2
+send /server smp

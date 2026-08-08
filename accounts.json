@@ -1,0 +1,56 @@
+[
+  {
+    "name": "huidwa",
+    "sh": "bots/huidwa.sh",
+    "script": "login_afk.txt",
+    "active": true
+  },
+  {
+    "name": "geasf",
+    "sh": "bots/geasf.sh",
+    "script": "login_afk.txt",
+    "active": true
+  },
+  {
+    "name": "ikujtyhfg",
+    "sh": "bots/ikujtyhfg.sh",
+    "script": "login_ikujtyhfg.txt",
+    "active": true
+  },
+  {
+    "name": "dhwaod",
+    "sh": "bots/dhwaod.sh",
+    "script": "login_afk.txt",
+    "active": true
+  },
+  {
+    "name": "djaiwp",
+    "sh": "bots/djaiwp.sh",
+    "script": "login_afk.txt",
+    "active": true
+  },
+  {
+    "name": "dnwauif",
+    "sh": "bots/dnwauif.sh",
+    "script": "login_afk.txt",
+    "active": true
+  },
+  {
+    "name": "dpawjdw",
+    "sh": "bots/dpawjdw.sh",
+    "script": "login_afk.txt",
+    "active": true
+  },
+  {
+    "name": "hdoiwa",
+    "sh": "bots/hdoiwa.sh",
+    "script": "login_afk.txt",
+    "active": true
+  },
+  {
+    "name": "khoablabla",
+    "sh": "bots/khoablabla.sh",
+    "script": "login_khoablabla.txt",
+    "active": false
+  }
+]

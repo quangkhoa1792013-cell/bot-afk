@@ -1,0 +1,10 @@
+{
+  "server": "aquamc.vn",
+  "port": 25565,
+  "version": "1.20.1",
+  "username": "Sonar",
+  "captcha_command": "/captcha {code}",
+  "discord_token": "MTUzNTcwNTkzNzY3NzkxNDEyMg.Gd7TI4.WuW33BtORcwPnaLvD5yDSL7V4JHaPH60as0J7k",
+  "discord_channel_id": "1535718580706877503",
+  "discord_prefix": "!submit"
+}

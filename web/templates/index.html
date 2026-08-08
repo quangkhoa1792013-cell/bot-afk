@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>⚡ BẢNG ĐIỀU KHIỂN TRUNG TÂM</title>
+<link rel="stylesheet" href="/static/css/style.css">
+<link rel="stylesheet" href="/static/vendor/xterm.min.css">
+</head>
+<body>
+
+<div class="bg-grid"></div>
+<div class="bg-glow g1"></div>
+<div class="bg-glow g2"></div>
+
+<header class="topbar">
+  <div class="logo">
+    <span class="logo-icon">⛏️</span>
+    <div>
+      <h1>BẢNG ĐIỀU KHIỂN TRUNG TÂM</h1>
+      <span class="subtitle">AFK Bot Control · AquaMC</span>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <div class="status-pill" id="pill-bots"><span class="dot"></span><span class="pill-text">Bots: ?</span></div>
+    <div class="status-pill" id="pill-terminal"><span class="dot"></span><span class="pill-text">Terminal: ?</span></div>
+    <div class="status-pill" id="pill-discord"><span class="dot"></span><span class="pill-text">Discord: ?</span></div>
+    <div class="hover-toggle" id="hover-toggle" title="Bật/tắt đổi tab khi rê chuột (kiểu Hyprland)">
+      <span class="toggle-icon">🖱️</span>
+      <span class="toggle-label">Hover</span>
+      <span class="toggle-switch"><span class="knob"></span></span>
+    </div>
+    <div class="clock" id="clock">--:--:--</div>
+  </div>
+</header>
+
+<nav class="tabbar" id="tabbar">
+  <button class="tab active" data-tab="overview"><span class="tab-emoji">📊</span><span> Tổng quan</span></button>
+  <button class="tab" data-tab="control"><span class="tab-emoji">🎮</span><span> Điều khiển</span></button>
+  <button class="tab" data-tab="manage"><span class="tab-emoji">🤖</span><span> Quản lý Bot</span></button>
+  <button class="tab" data-tab="captcha"><span class="tab-emoji">🧩</span><span> CAPTCHA</span></button>
+  <div class="tab-indicator" id="tab-indicator"></div>
+</nav>
+
+<main>
+  <!-- ============ TAB: TỔNG QUAN ============ -->
+  <section class="tab-panel active" id="panel-overview">
+    <div class="cards">
+      <div class="card" data-glow="emerald">
+        <div class="card-icon">🤖</div>
+        <div class="card-info">
+          <div class="card-label">Dàn Bot</div>
+          <div class="card-value" id="ov-bots">—</div>
+          <div class="card-sub" id="ov-bots-sub">đang kiểm tra...</div>
+        </div>
+        <div class="card-status"><span class="pulse-dot"></span></div>
+      </div>
+      <div class="card" data-glow="cyan">
+        <div class="card-icon">🖥️</div>
+        <div class="card-info">
+          <div class="card-label">Tài khoản</div>
+          <div class="card-value" id="ov-accounts">—</div>
+          <div class="card-sub" id="ov-accounts-sub">—</div>
+        </div>
+        <div class="card-status"><span class="pulse-dot"></span></div>
+      </div>
+      <div class="card" data-glow="violet">
+        <div class="card-icon">🧩</div>
+        <div class="card-info">
+          <div class="card-label">CAPTCHA đã bắt</div>
+          <div class="card-value" id="ov-captcha">—</div>
+          <div class="card-sub">ảnh trong captcha_dumps/</div>
+        </div>
+        <div class="card-status"><span class="pulse-dot"></span></div>
+      </div>
+      <div class="card" data-glow="amber">
+        <div class="card-icon">🕒</div>
+        <div class="card-info">
+          <div class="card-label">Uptime máy</div>
+          <div class="card-value small" id="ov-uptime">—</div>
+          <div class="card-sub" id="ov-disk">—</div>
+        </div>
+        <div class="card-status"><span class="pulse-dot"></span></div>
+      </div>
+    </div>
+
+    <div class="quick-actions">
+      <button class="qbtn start" data-action="start_bots">▶ Khởi động Bots</button>
+      <button class="qbtn restart" data-action="restart_bots">🔄 Restart Bots</button>
+      <button class="qbtn stop" data-action="stop_bots">⏹ Tắt Bots</button>
+      <button class="qbtn restart" data-action="restart_web">🔄 Restart Web(ttyd)</button>
+      <button class="qbtn" data-action="start_web">🌐 Bật Web(ttyd)</button>
+    </div>
+
+    <div class="log-box">
+      <div class="log-title">📜 run.log (30 dòng cuối)</div>
+      <pre id="log-content" class="log-content">đang tải...</pre>
+    </div>
+  </section>
+
+  <!-- ============ TAB: ĐIỀU KHIỂN ============ -->
+  <section class="tab-panel" id="panel-control">
+    <div class="control-wrap">
+      <div class="control-bar">
+        <span class="ctl-hint">💡 Chạy trực tiếp <code>run.sh</code> — đầy đủ menu như terminal. Dùng các nút dưới để bấm nhanh.</span>
+        <button class="qbtn start sm" data-action="start_bots">▶ Bots ON</button>
+        <button class="qbtn stop sm" data-action="stop_bots">⏹ Bots OFF</button>
+        <button class="qbtn restart sm" data-action="restart_bots">🔄 Bots Reset</button>
+        <button class="qbtn restart sm" data-action="restart_web">🔄 Web Reset</button>
+        <button class="qbtn violet sm" id="btn-term-restart">♻️ Mở lại Terminal</button>
+      </div>
+      <div id="terminal" class="terminal"></div>
+    </div>
+  </section>
+
+  <!-- ============ TAB: QUẢN LÝ BOT ============ -->
+  <section class="tab-panel" id="panel-manage">
+    <div class="manage-head">
+      <h2>🤖 Danh sách tài khoản <span class="badge" id="mg-count">0</span></h2>
+      <button class="qbtn add" id="btn-add-toggle">＋ Thêm Bot mới</button>
+    </div>
+
+    <div class="add-form" id="add-form">
+      <input type="text" id="add-name" placeholder="Tên tài khoản (vd: acc1)" class="inp">
+      <input type="text" id="add-server" placeholder="IP Server (aquamc.vn)" class="inp">
+      <input type="text" id="add-script" placeholder="File script (login_afk.txt)" class="inp">
+      <button class="qbtn start sm" id="btn-add-save">＋ Lưu</button>
+    </div>
+
+    <div id="account-list" class="account-list"></div>
+
+    <div class="log-viewer">
+      <div class="lv-head">
+        <h3>📜 Log & Chat trực tiếp</h3>
+        <div class="lv-bots" id="lv-bots"></div>
+        <button class="qbtn violet sm" id="btn-mode">▤ Chia ô (ttyd)</button>
+        <label class="auto"><input type="checkbox" id="lv-auto" checked> Tự cuộn</label>
+      </div>
+      <div id="single-view" class="bot-log-wrap">
+        <pre id="bot-log" class="bot-log">Chọn một bot để xem log & chat...</pre>
+        <div class="chat-bar">
+          <span class="chat-target" id="chat-target">🤖 —</span>
+          <input id="chat-input" class="inp" placeholder="Nhắn chat cho bot đang chọn... (Enter để gửi)" autocomplete="off">
+          <button class="qbtn start sm" id="chat-send">Gửi ➤</button>
+        </div>
+      </div>
+      <div id="split-grid" class="split-grid" style="display:none"></div>
+    </div>
+    <div id="toast" class="toast"></div>
+  </section>
+
+  <!-- ============ TAB: CAPTCHA ============ -->
+  <section class="tab-panel" id="panel-captcha">
+    <div class="captcha-hero">
+      <div class="captcha-preview" id="captcha-preview">
+        <span class="placeholder">Chưa có ảnh captcha</span>
+      </div>
+      <div class="captcha-side">
+        <h2>🧩 Xác minh CAPTCHA</h2>
+        <p>Ảnh map được render tự động khi bot nhận CAPTCHA và gửi lên <b>Discord</b> + hiển thị ở đây — <b>kèm tên tài khoản</b> để biết bot nào bị xác minh.</p>
+        <div class="discord-status" id="discord-status"><span class="pulse-dot"></span> Discord bridge: đang kiểm tra...</div>
+        <div class="bridge-actions">
+          <button class="qbtn start sm" id="btn-bridge-start">▶ Chạy captcha bridge</button>
+          <button class="qbtn stop sm" id="btn-bridge-stop">⏹ Tắt bridge</button>
+        </div>
+        <div class="submit-row">
+          <input type="text" id="captcha-code" class="inp big" placeholder="Nhập mã captcha...">
+          <button class="qbtn start" id="btn-captcha-submit">Gửi mã ➤</button>
+        </div>
+        <p class="hint">💬 Trên Discord gõ <code>!submit &lt;mã&gt;</code> cũng được (định dạng cấu hình trong config.json).</p>
+      </div>
+    </div>
+    <div class="captcha-history">
+      <h3>📂 Lịch sử CAPTCHA</h3>
+      <div id="captcha-grid" class="captcha-grid"></div>
+    </div>
+  </section>
+</main>
+
+<script src="/static/vendor/xterm.min.js"></script>
+<script src="/static/vendor/xterm-addon-fit.min.js"></script>
+<script src="/static/js/main.js"></script>
+</body>
+</html>
