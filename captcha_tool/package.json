@@ -1,0 +1,16 @@
+{
+  "name": "captcha_tool",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Correct Minecraft 1.20.1 map captcha capture: 128x128 chunk assembly + vanilla palette + pixelated web viewer",
+  "main": "captcha_bot.js",
+  "scripts": {
+    "test": "node test.js",
+    "start": "node captcha_bot.js",
+    "web": "node server.js"
+  },
+  "dependencies": {
+    "mineflayer": "^4.37.1",
+    "pngjs": "^7.0.0"
+  }
+}

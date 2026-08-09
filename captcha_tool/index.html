@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Minecraft Map Captcha Viewer</title>
+<style>
+  body {
+    background: #1b1b1b;
+    color: #ddd;
+    font-family: Consolas, monospace;
+    margin: 0;
+    padding: 20px;
+    text-align: center;
+  }
+  h1 { font-size: 18px; margin: 0 0 12px; color: #fff; }
+  #mapCanvas {
+    width: 512px;
+    height: 512px;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    image-rendering: -moz-crisp-edges;
+    image-rendering: -webkit-optimize-contrast;
+    background: #000;
+    border: 2px solid #333;
+    display: block;
+    margin: 0 auto;
+    max-width: 90vw;
+    max-height: 90vw;
+    width: min(512px, 90vw);
+    height: min(512px, 90vw);
+  }
+  #meta {
+    margin-top: 10px;
+    font-size: 13px;
+    color: #8f8f8f;
+    min-height: 18px;
+  }
+  #error { color: #e05c5c; }
+  canvas#raw {
+    position: fixed;
+    left: -10000px;
+    image-rendering: pixelated;
+  }
+</style>
+</head>
+<body>
+  <h1>Map Captcha Viewer (pixelated)</h1>
+  <canvas id="mapCanvas" width="128" height="128"></canvas>
+  <div id="meta">Waiting for capture...</div>
+  <canvas id="raw" width="128" height="128"></canvas>
+
+<script>
+const canvas = document.getElementById('mapCanvas');
+const raw = document.getElementById('raw');
+const meta = document.getElementById('meta');
+const ctx = canvas.getContext('2d');
+const rctx = raw.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+rctx.imageSmoothingEnabled = false;
+
+let lastStamp = 0;
+
+async function refresh() {
+  try {
+    const res = await fetch('/latest.json', { cache: 'no-store' });
+    if (!res.ok) return;
+    const info = await res.json();
+    if (info.timestamp === lastStamp) return;
+    lastStamp = info.timestamp;
+
+    const img = new Image();
+    img.src = '/latest.png?' + info.timestamp;
+    await img.decode();
+    rctx.drawImage(img, 0, 0, 128, 128);
+    ctx.drawImage(raw, 0, 0, 128, 128);
+
+    meta.textContent = `map #${info.mapId} | scale ${info.scale} | locked ${info.locked} | ` +
+      `${info.filledPixels}/16384 px | ${info.packetCount} packets | ${new Date(info.timestamp).toLocaleTimeString()}`;
+    document.title = `Map #${info.mapId}`;
+  } catch (e) {
+    meta.textContent = 'No capture yet - waiting for map packets...';
+  }
+}
+
+refresh();
+setInterval(refresh, 1000);
+</script>
+</body>
+</html>
