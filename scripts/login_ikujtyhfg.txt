@@ -2,3 +2,5 @@ wait 9
 send /login khoablabla
 wait 2
 send /server smp
+wait 2
+send /home base
