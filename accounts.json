@@ -51,23 +51,11 @@
     "name": "khoablabla",
     "sh": "bots/khoablabla.sh",
     "script": "login_khoablabla.txt",
-    "active": false
+    "active": true
   },
   {
     "name": "jodawh",
     "sh": "bots/jodawh.sh",
-    "script": "login_afk.txt",
-    "active": true
-  },
-  {
-    "name": "idopa",
-    "sh": "bots/idopa.sh",
-    "script": "login_afk.txt",
-    "active": true
-  },
-  {
-    "name": "bjkzsd",
-    "sh": "bots/bjkzsd.sh",
     "script": "login_afk.txt",
     "active": true
   }
