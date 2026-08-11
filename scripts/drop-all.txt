@@ -1,0 +1,83 @@
+// drop toan bo item trong inventory (slots 5-45: armor+inv+hotbar+offhand)
+inventory player drop 5 all
+wait 5
+inventory player drop 6 all
+wait 5
+inventory player drop 7 all
+wait 5
+inventory player drop 8 all
+wait 5
+inventory player drop 9 all
+wait 5
+inventory player drop 10 all
+wait 5
+inventory player drop 11 all
+wait 5
+inventory player drop 12 all
+wait 5
+inventory player drop 13 all
+wait 5
+inventory player drop 14 all
+wait 5
+inventory player drop 15 all
+wait 5
+inventory player drop 16 all
+wait 5
+inventory player drop 17 all
+wait 5
+inventory player drop 18 all
+wait 5
+inventory player drop 19 all
+wait 5
+inventory player drop 20 all
+wait 5
+inventory player drop 21 all
+wait 5
+inventory player drop 22 all
+wait 5
+inventory player drop 23 all
+wait 5
+inventory player drop 24 all
+wait 5
+inventory player drop 25 all
+wait 5
+inventory player drop 26 all
+wait 5
+inventory player drop 27 all
+wait 5
+inventory player drop 28 all
+wait 5
+inventory player drop 29 all
+wait 5
+inventory player drop 30 all
+wait 5
+inventory player drop 31 all
+wait 5
+inventory player drop 32 all
+wait 5
+inventory player drop 33 all
+wait 5
+inventory player drop 34 all
+wait 5
+inventory player drop 35 all
+wait 5
+inventory player drop 36 all
+wait 5
+inventory player drop 37 all
+wait 5
+inventory player drop 38 all
+wait 5
+inventory player drop 39 all
+wait 5
+inventory player drop 40 all
+wait 5
+inventory player drop 41 all
+wait 5
+inventory player drop 42 all
+wait 5
+inventory player drop 43 all
+wait 5
+inventory player drop 44 all
+wait 5
+inventory player drop 45 all
+wait 5
