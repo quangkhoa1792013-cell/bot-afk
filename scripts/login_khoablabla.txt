@@ -1,4 +1,12 @@
-wait 9
-send /login khoalaptrinh
-wait 2
-send /server smp
+wait 180
+send /dn khoalaptrinh
+wait 60
+send /dn khoalaptrinh
+wait 80
+inventory 0 click 40
+wait 80
+inventory 1 click 24
+wait 80
+send /afk
+wait 80
+inventory 1 click 22

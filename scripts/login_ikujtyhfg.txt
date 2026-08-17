@@ -1,6 +1,12 @@
-wait 9
-send /login khoablabla
-wait 2
-send /server smp
-wait 2
-send /home base
+wait 180
+send /dn khoablabla
+wait 60
+send /dn khoablabla
+wait 80
+inventory 0 click 40
+wait 80
+inventory 1 click 24
+wait 80
+send /afk
+wait 80
+inventory 1 click 22

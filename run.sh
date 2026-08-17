@@ -11,7 +11,7 @@ cd "$CD_DIR" || { echo "[LỖI] Không thể truy cập thư mục $CD_DIR"; exi
 SESSION="mc_bots"
 PORT=7681
 JSON_FILE="accounts.json"
-DEFAULT_SERVER="aquamc.vn"
+DEFAULT_SERVER="kingmc.vn"
 
 # Khoảng cách (giây) giữa các acc chạy .sh để vào server — để sát quá bị server nghi DDoS và ban
 DELAY_BETWEEN_BOTS=5
@@ -133,7 +133,7 @@ start_bots() {
 
     for ((i=0; i<TOTAL_BOTS; i++)); do
         BOT_NAME=$(jq -r ".[$i].name" "$JSON_FILE")
-        IS_ACTIVE=$(jq -r ".[$i].active // true" "$JSON_FILE")
+        IS_ACTIVE=$(jq -r ".[$i].active != false" "$JSON_FILE")
 
         if [ "$IS_ACTIVE" != "true" ]; then
             echo "--> [BOT] BỎ QUA (đang TẮT): $BOT_NAME"
@@ -320,7 +320,7 @@ delete_account() {
     echo ""
     for ((i=0; i<TOTAL; i++)); do
         NAME=$(jq -r ".[$i].name" "$JSON_FILE")
-        ACTIVE=$(jq -r ".[$i].active // true" "$JSON_FILE")
+        ACTIVE=$(jq -r ".[$i].active != false" "$JSON_FILE")
         STATE="ON"; [ "$ACTIVE" != "true" ] && STATE="OFF"
         printf "   %2d) %-15s [%s]\n" "$((i+1))" "$NAME" "$STATE"
     done
@@ -459,7 +459,7 @@ toggle_bot_menu() {
         echo ""
         for ((i=0; i<TOTAL; i++)); do
             NAME=$(jq -r ".[$i].name" "$JSON_FILE")
-            ACTIVE=$(jq -r ".[$i].active // true" "$JSON_FILE")
+            ACTIVE=$(jq -r ".[$i].active != false" "$JSON_FILE")
             [ "$ACTIVE" != "true" ] && { echo "   $((i+1))) $NAME [đang TẮT]"; continue; }
             SH=$(jq -r ".[$i].sh" "$JSON_FILE")
             REAL=$(get_real_acc "$NAME" "$SH")

@@ -8,7 +8,7 @@
   {
     "name": "geasf",
     "sh": "bots/geasf.sh",
-    "script": "login_afk.txt",
+    "script": "login_af.txt",
     "active": true
   },
   {
