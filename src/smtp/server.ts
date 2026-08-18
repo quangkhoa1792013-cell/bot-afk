@@ -11,6 +11,7 @@ import { randomUUID } from 'node:crypto';
 import { SMTP_HOST, SMTP_PORT, MAIL_DOMAIN, CATCH_ALL } from '../config';
 import { parseRawMessage } from '../parser/message.parser';
 import { insertMessage, isMailboxAllowed } from '../db/mail.repository';
+import { findProfilesByEmail } from '../profiles/profile.repository';
 import { bus } from '../events/bus';
 import { notifyTelegram } from '../notifications/telegram';
 
@@ -51,7 +52,9 @@ export async function startSmtpServer(): Promise<SMTPServer> {
     },
 
     /**
-     * RCPT TO: CHỈ chấp nhận địa chỉ đã tạo trong dashboard (vd: ten@khoablabla.ddns.net).
+     * RCPT TO: CHỈ chấp nhận địa chỉ đã tạo trong dashboard:
+     *  - Địa chỉ hòm thư (mailboxes table, vd: ten@khoablabla.ddns.net)
+     *  - assigned_email của Profile (vd: bot01@khoablabla.ddns.net)
      * Địa chỉ lạ -> từ chối 550. Bật CATCH_ALL=true trong .env nếu muốn nhận mọi thứ.
      */
     onRcptTo(address: SMTPServerAddress, session: SMTPServerSession, callback: (err?: Error) => void): void {
@@ -66,10 +69,12 @@ export async function startSmtpServer(): Promise<SMTPServer> {
         const [local, domain] = addr.split('@');
         const allowed =
           local === 'postmaster' || // chuẩn SMTP, luôn nhận
-          (domain === MAIL_DOMAIN && isMailboxAllowed(local));
+          (domain === MAIL_DOMAIN && isMailboxAllowed(local)) ||
+          // Email gán cho Profile (kể cả domain lạ nếu profile dùng email ngoài)
+          findProfilesByEmail(addr).length > 0;
 
         if (!allowed) {
-          log(`TỪ CHỐI ${addr}: chưa tạo địa chỉ này (tạo trên dashboard -> Địa chỉ hòm thư)`);
+          log(`TỪ CHỐI ${addr}: chưa tạo địa chỉ này (tạo trên dashboard -> Quản lý Profile / Địa chỉ hòm thư)`);
           return callback(new Error(`550 Mailbox not found: ${address.address}`));
         }
       }

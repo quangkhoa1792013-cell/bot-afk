@@ -11,6 +11,8 @@ export type BusEvents = {
   'mail-updated': (payload: { id: string }) => void;
   'mail-deleted': (payload: { id: string }) => void;
   'mails-cleared': () => void;
+  /** Danh sách Profile thay đổi (tạo/sửa/xóa) — dashboard cần refresh */
+  'profiles-changed': () => void;
 };
 
 class EventBus extends EventEmitter {

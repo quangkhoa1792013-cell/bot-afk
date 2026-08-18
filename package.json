@@ -12,6 +12,7 @@
     "build": "tsc -p tsconfig.json && vite build --config web/vite.config.ts",
     "start": "node dist/index.js",
     "test": "node test/smoke.js",
+    "test:profile": "node test/profile-smoke.js",
     "test:send": "node test/send-sample.js",
     "typecheck": "tsc --noEmit"
   },

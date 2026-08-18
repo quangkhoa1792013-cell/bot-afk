@@ -34,6 +34,8 @@ export interface ListMessagesOptions {
   folder?: 'inbox' | 'unread' | 'favorite';
   /** Lọc theo địa chỉ hòm thư: chỉ lấy mail tới <mailbox>@domain */
   mailbox?: string;
+  /** Lọc theo địa chỉ email ĐẦY ĐỦ (vd: bot01@khoablabla.ddns.net) — dùng cho Profile */
+  toEmail?: string;
   limit?: number;
   offset?: number;
 }
@@ -135,6 +137,12 @@ export function listMessages(opts: ListMessagesOptions = {}): MessageRow[] {
     // Chỉ lấy mail gửi tới địa chỉ <mailbox>@<domain>
     where.push('to_addr LIKE ?');
     params.push(`%${opts.mailbox}@%`);
+  }
+
+  if (opts.toEmail) {
+    // Lọc chính xác theo địa chỉ email đầy đủ (Profile assigned_email)
+    where.push('LOWER(to_addr) = LOWER(?)');
+    params.push(opts.toEmail);
   }
 
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
@@ -358,6 +366,24 @@ export function updateMailbox(id: string, patch: { name?: string; note?: string 
 export function deleteMailbox(id: string): boolean {
   requireDb();
   return toNum(db.prepare('DELETE FROM mailboxes WHERE id = ?').run(id).changes) > 0;
+}
+
+// ---------------- Đếm mail theo địa chỉ email (dùng cho Profile) ----------------
+
+/** Số mail đã nhận tới đúng địa chỉ email (không phân biệt hoa thường). */
+export function countMessagesForEmail(email: string): number {
+  requireDb();
+  const row = db.prepare('SELECT COUNT(*) AS c FROM messages WHERE LOWER(to_addr) = LOWER(?)').get(email) as
+    { c: number | bigint };
+  return toNum(row.c);
+}
+
+/** Số mail CHƯA ĐỌC tới đúng địa chỉ email (badge trên card/tab của Profile). */
+export function countUnreadForEmail(email: string): number {
+  requireDb();
+  const row = db.prepare('SELECT COUNT(*) AS c FROM messages WHERE LOWER(to_addr) = LOWER(?) AND read = 0').get(email) as
+    { c: number | bigint };
+  return toNum(row.c);
 }
 
 // ---------------- Settings ----------------

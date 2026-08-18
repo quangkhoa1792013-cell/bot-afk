@@ -8,8 +8,11 @@ Nhận email **catch-all** (mọi địa chỉ `*@khoablabla.ddns.net` hoặc `*
 
 | Tính năng | Mô tả |
 |---|---|
+| 🤖 **Quản lý Profile (Web-in-Web)** | 1 Profile = 1 bot: gán `assigned_email` + `target_url` web local. CRUD đầy đủ, danh sách bên Sidebar, bấm vào Profile → mở workspace nhúng web bot qua **iframe** (tab 🌐 Bot Web) + **hòm thư riêng** của email đó (tab 📥 Mail) |
+| 🔔 **Báo mail theo Profile** | Mail gửi tới `assigned_email` của Profile nào → **flash + badge** ngay trên card/tab Profile đó (realtime qua SSE), kèm toast riêng cho từng Profile |
+| 🗂 Lưu trữ Profile | File `data/profiles.json` (JSON thuần, dễ copy/di chuyển sang máy khác) |
 | 📫 Địa chỉ hòm thư | **Tạo trước** các địa chỉ `ten@khoablabla.ddns.net` (đặt tên + ghi chú), đổi tên, xóa. Mail tới địa chỉ **chưa tạo bị từ chối** (550) |
-| 📥 SMTP Receiver | Lắng nghe port 25, chỉ nhận mail tới địa chỉ đã tạo (hoặc bật `CATCH_ALL=true`), không cần xác thực, **không relay** |
+| 📥 SMTP Receiver | Lắng nghe port 25, chỉ nhận mail tới địa chỉ đã tạo **hoặc assigned_email của Profile** (hoặc bật `CATCH_ALL=true`), không cần xác thực, **không relay** |
 | 🔑 OTP Extractor | Regex thông minh bóc mã 4–8 chữ số (ưu tiên vùng keyword "mã xác nhận / otp / verification code") + link kích hoạt |
 | 🤖 Telegram Notify | Gửi tin nhắn ngay khi có mail: `📩 Mail tới / 👤 Từ / 📌 Tiêu đề / 🔑 Mã OTP` |
 | 🌐 Web Dashboard | List mail live (SSE), xem chi tiết (HTML/text), OTP highlight, tải attachment |
@@ -30,7 +33,9 @@ bot-mail/
 │   ├── db/
 │   │   ├── database.ts          # SQLite schema (node:sqlite built-in)
 │   │   └── mail.repository.ts   # CRUD mail/attachment/sent/settings
-│   ├── smtp/server.ts           # SMTP server port 25 (catch-all)
+│   ├── profiles/
+│   │   └── profile.repository.ts# Profile CRUD -> data/profiles.json (JSON)
+│   ├── smtp/server.ts           # SMTP server port 25 (duyệt mailbox + profile email)
 │   ├── parser/
 │   │   ├── message.parser.ts    # mailparser: raw -> các trường
 │   │   └── otp.extractor.ts     # Regex OTP + link extractor
@@ -38,7 +43,8 @@ bot-mail/
 │   ├── mailer/send.service.ts   # nodemailer: gửi mail ra ngoài
 │   ├── api/
 │   │   ├── app.ts               # Express + serve web/dist (Vite build)
-│   │   └── routes/              # mails.ts, send.ts, events.ts (SSE)
+│   │   └── routes/              # mails.ts, send.ts, events.ts (SSE),
+│   │                            # mailboxes.ts, profiles.ts
 │   └── cleanup/janitor.ts       # Dọn mail > 24h định kỳ
 ├── web/                         # Dashboard (Vite + React + Tailwind CSS)
 │   ├── vite.config.ts           # dev :5173, proxy /api -> :3000
@@ -46,9 +52,11 @@ bot-mail/
 │   └── src/
 │       ├── main.ts / style.css  # theme dark glassmorphism
 │       ├── store.ts             # state + API + SSE + toast
-│       └── components/          # Sidebar, MailList, MailDetail,
-│                                # ComposeModal, SettingsModal, ToastStack
+│       └── components/          # Sidebar, Profiles, ProfileWorkspace (iframe),
+│                                # ProfileMailList, ProfileModal, MailList,
+│                                # MailDetail, ComposeModal, SettingsModal, Toasts
 ├── data/mail.db                 # SQLite (tự tạo khi chạy)
+├── data/profiles.json           # Danh sách Profile (JSON, tự tạo khi chạy)
 ├── .env                         # Cấu hình (copy từ .env.example)
 └── package.json
 ```
@@ -164,6 +172,21 @@ swaks --to test1@khoablabla.ddns.net --from you@gmail.com \
 
 Hoặc dùng thư viện tự kiểm tra nội bộ (xem mục Test bên dưới).
 
+## 🤖 Quản lý Profile (Web-in-Web) — dùng thế nào
+
+1. Vào **Sidebar → Quản lý Profile → ➕ Tạo Profile**, nhập:
+   - **Tên**: vd `Discord Bot 01`
+   - **assigned_email**: vd `bot01@khoablabla.ddns.net` (SMTP sẽ nhận mail gửi tới địa chỉ này, kể cả khi chưa tạo ở "Địa chỉ hòm thư")
+   - **target_url**: URL web local của bot, vd `http://localhost:8080`
+   - **notes** + **status** (Active/Inactive)
+2. Bấm vào Profile (trong Sidebar hoặc trên card) → workspace mở ra:
+   - **🌐 Bot Web**: nhúng web local của bot qua `<iframe>` (kèm nút 🔄 tải lại / ↗ mở tab mới)
+   - **📥 Mail**: hòm thư riêng của `assigned_email` — search, đọc, đánh dấu, xóa
+   - **ℹ️ Thông tin**: chi tiết + ghi chú + nút tạm tắt/kích hoạt
+3. Mail mới gửi tới `assigned_email` của Profile nào → card/tab Profile đó **flash + badge** ngay, kèm toast `🤖 <tên profile> vừa nhận mail` (OTP được tô vàng).
+
+> 💡 Nếu iframe trống: bot web của bạn có thể chặn nhúng bằng header `X-Frame-Options` — dùng nút **↗ Tab mới** thay thế. Dashboard và bot nên chạy cùng một máy (cùng `localhost`) để iframe hoạt động ổn định.
+
 ## 🔑 Cách hoạt động
 
 ```
@@ -186,6 +209,11 @@ Internet ──> Router (forward port 25) ──> 192.168.1.50:25
 
 | Method | Endpoint | Mô tả |
 |---|---|---|
+| GET | `/api/profiles` | Danh sách Profile (kèm `mailCount` + `unreadCount` của assigned_email) |
+| POST | `/api/profiles` | Tạo Profile `{name, assignedEmail, targetUrl?, notes?, status?}` |
+| PATCH | `/api/profiles/:id` | Sửa (mọi field optional; trùng tên/email → 409) |
+| DELETE | `/api/profiles/:id` | Xóa Profile |
+| GET | `/api/profiles/:id/mails?search=&limit=` | Mail gửi tới đúng assigned_email của Profile |
 | GET | `/api/mailboxes` | Danh sách địa chỉ hòm thư (kèm số mail mỗi địa chỉ) |
 | POST | `/api/mailboxes` | Tạo địa chỉ `{name, note}` |
 | PATCH | `/api/mailboxes/:id` | Sửa `{name?, note?}` (đổi tên = đổi địa chỉ) |
@@ -201,7 +229,7 @@ Internet ──> Router (forward port 25) ──> 192.168.1.50:25
 | POST | `/api/send/test` | Test kết nối SMTP |
 | GET | `/api/sent` | Hộp đã gửi |
 | GET/PUT | `/api/settings*` | Cấu hình SMTP/Telegram |
-| GET | `/api/events` | **SSE** — push mail mới realtime |
+| GET | `/api/events` | **SSE** — push mail mới realtime (kèm `profileIds` khớp assigned_email) + `profiles-changed` |
 | GET | `/api/health` | Health check |
 
 ## 🧪 Test toàn bộ luồng (tự động)
@@ -212,6 +240,9 @@ SMTP_PORT=2525 npm run dev
 
 # 2. Terminal khác:
 npm run build && node test/smoke.js
+
+# Test riêng tính năng Quản lý Profile (CRUD + mail tới assigned_email + SSE):
+npm run test:profile
 ```
 
 Script sẽ gửi 3 mail mẫu (OTP + link kích hoạt + attachment) vào port 2525 rồi
@@ -219,7 +250,7 @@ verify chúng xuất hiện qua API `/api/mails` kèm OTP bóc tách đúng.
 
 ## 📝 Ghi chú vận hành
 
-- **Backup**: chỉ cần copy `data/mail.db` (dạng file duy nhất).
+- **Backup**: chỉ cần copy `data/mail.db` + `data/profiles.json` (dạng file đơn lẻ).
 - **Giới hạn**: mail > 25MB bị từ chối (`552`); tối đa 50 người nhận/mail.
 - **Bảo mật**: dashboard không có auth — nếu muốn lộ ra internet, đặt sau reverse proxy (Caddy/Nginx) có basic-auth, hoặc chạy trên VPN/Tailscale thay vì mở port.
 - Port `WEB_PORT` (3000) không cần mở trên router trừ khi muốn truy cập dashboard từ ngoài.

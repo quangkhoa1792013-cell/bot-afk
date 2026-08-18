@@ -9,6 +9,7 @@ import { mailsRouter } from './routes/mails';
 import { sendRouter } from './routes/send';
 import { eventsRouter } from './routes/events';
 import { mailboxesRouter } from './routes/mailboxes';
+import { profilesRouter } from './routes/profiles';
 import { MAIL_DOMAIN, CATCH_ALL, SMTP_PORT } from '../config';
 
 export function createApp(): express.Express {
@@ -34,6 +35,7 @@ export function createApp(): express.Express {
 
   app.use('/api/mails', mailsRouter);
   app.use('/api/mailboxes', mailboxesRouter);
+  app.use('/api/profiles', profilesRouter);
   app.use('/api', sendRouter);
   app.use('/api', eventsRouter);
 

@@ -54,3 +54,22 @@ body {
 .float-slow {
   animation: float 3s ease-in-out infinite;
 }
+
+/* Flash khi Profile vừa nhận mail mới (card / tab / banner) */
+@keyframes profile-flash-kf {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(251, 191, 36, 0); }
+  50% { box-shadow: 0 0 0 4px rgba(251, 191, 36, 0.45); }
+}
+.profile-flash {
+  animation: profile-flash-kf 0.9s ease-in-out 3;
+}
+
+/* Chấm nháy "có mail mới" */
+@keyframes ping-soft {
+  0% { transform: scale(1); opacity: 1; }
+  70% { transform: scale(1.6); opacity: 0.4; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.profile-ping {
+  animation: ping-soft 1s ease-in-out infinite;
+}

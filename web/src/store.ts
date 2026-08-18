@@ -46,7 +46,25 @@ export interface Mailbox {
   mailCount: number;
 }
 
-export type Folder = 'mailboxes' | 'all' | 'inbox' | 'unread' | 'favorite' | 'sent';
+/** Profile quản lý tập trung (Web-in-Web): 1 bot = 1 email + 1 web local. */
+export interface Profile {
+  id: string;
+  name: string;
+  assignedEmail: string;
+  targetUrl: string;
+  notes: string;
+  status: 'active' | 'inactive';
+  createdAt: number;
+  updatedAt: number;
+  /** Số mail đã nhận tới assignedEmail */
+  mailCount: number;
+  /** Số mail chưa đọc (badge trên card/tab) */
+  unreadCount: number;
+}
+
+export type ProfileTab = 'web' | 'mail' | 'info';
+
+export type Folder = 'profiles' | 'mailboxes' | 'all' | 'inbox' | 'unread' | 'favorite' | 'sent';
 
 interface Toast {
   id: number;
@@ -78,6 +96,16 @@ interface State {
   /** Các mail đang tick checkbox (xóa hàng loạt) */
   selectedIds: string[];
   toasts: Toast[];
+  /** Toàn bộ Profile (kèm mailCount/unreadCount từ backend) */
+  profiles: Profile[];
+  /** Profile đang mở trong workspace (null = chưa mở) */
+  activeProfileId: string | null;
+  /** Tab đang xem trong workspace của profile */
+  profileTab: ProfileTab;
+  /** Profile vừa nhận mail mới (id -> seq) để flash trên card/tab */
+  profileFlash: Record<string, number>;
+  /** Tăng mỗi lần có mail mới -> component tải lại danh sách */
+  mailVersion: number;
 }
 
 /* ============ Store mini (không cần thư viện) ============ */
@@ -98,6 +126,11 @@ let state: State = {
   sidebarOpen: false,
   selectedIds: [],
   toasts: [],
+  profiles: [],
+  activeProfileId: null,
+  profileTab: 'web',
+  profileFlash: {},
+  mailVersion: 0,
 };
 
 const listeners = new Set<() => void>();
@@ -188,6 +221,7 @@ export async function loadSent(): Promise<void> {
 export async function loadMails(): Promise<void> {
   const s = getState();
   if (s.folder === 'mailboxes') return loadMailboxes();
+  if (s.folder === 'profiles') return loadProfiles();
   if (s.folder === 'sent') return loadSent();
 
   const folderForApi = s.folder === 'all' ? 'inbox' : s.folder;
@@ -206,7 +240,7 @@ export async function loadMails(): Promise<void> {
 
 /** Chuyển sang một mục (folder) + reset bộ lọc, tải lại danh sách. */
 export function setFolder(folder: Folder, mailboxFilter: string | null = null): void {
-  setState({ folder, mailboxFilter, search: '', selected: null, sidebarOpen: false });
+  setState({ folder, mailboxFilter, search: '', selected: null, activeProfileId: null, sidebarOpen: false });
   loadMails();
 }
 
@@ -327,10 +361,148 @@ export function goToMailbox(name: string): void {
   setFolder('inbox', name);
 }
 
+/* ============ Profile (Quản lý Profile tập trung) ============ */
+
+export async function loadProfiles(): Promise<void> {
+  try {
+    const data = await api<{ profiles: Profile[] }>('/profiles');
+    setState({ profiles: data.profiles });
+    refreshStats();
+  } catch (e) {
+    toast(`Lỗi tải Profile: ${(e as Error).message}`, 'error');
+  }
+}
+
+export interface ProfileInput {
+  name: string;
+  assignedEmail: string;
+  targetUrl?: string;
+  notes?: string;
+  status?: Profile['status'];
+}
+
+export async function createProfile(input: ProfileInput): Promise<void> {
+  await api('/profiles', { method: 'POST', body: JSON.stringify(input) });
+  await loadProfiles();
+}
+
+export async function updateProfile(id: string, patch: Partial<ProfileInput>): Promise<void> {
+  await api(`/profiles/${id}`, { method: 'PATCH', body: JSON.stringify(patch) });
+  await loadProfiles();
+}
+
+export async function removeProfile(id: string): Promise<void> {
+  await api(`/profiles/${id}`, { method: 'DELETE' });
+  const cur = getState();
+  setState({
+    activeProfileId: cur.activeProfileId === id ? null : cur.activeProfileId,
+  });
+  await loadProfiles();
+}
+
+/** Mở workspace của 1 profile (tab mặc định: Bot Web). */
+export function openProfile(id: string, tab: ProfileTab = 'web'): void {
+  const flash = { ...getState().profileFlash };
+  delete flash[id];
+  setState({ activeProfileId: id, profileTab: tab, selected: null, folder: 'profiles', sidebarOpen: false, profileFlash: flash });
+  loadProfiles();
+}
+
+export function setProfileTab(tab: ProfileTab): void {
+  setState({ profileTab: tab });
+}
+
+/** Flash (nháy) card/tab của profile khi có mail mới tới email của nó. */
+export function flashProfile(id: string): void {
+  const seq = (getState().profileFlash[id] ?? 0) + 1;
+  setState({ profileFlash: { ...getState().profileFlash, [id]: seq } });
+  setTimeout(() => {
+    const cur = getState();
+    if (cur.profileFlash[id] === seq) {
+      const next = { ...cur.profileFlash };
+      delete next[id];
+      setState({ profileFlash: next });
+    }
+  }, 4000);
+}
+
+/** Tải mail của 1 profile (tới đúng assigned_email). */
+export async function loadProfileMails(profileId: string, search = ''): Promise<Mail[]> {
+  const params = new URLSearchParams({ limit: '200' });
+  if (search.trim()) params.set('search', search.trim());
+  const data = await api<{ messages: Mail[] }>(`/profiles/${profileId}/mails?${params}`);
+  return data.messages;
+}
+
 /* ============ SSE: mail mới về là hiện ngay ============ */
+
+function handleSSEEvent(type: string, payload: unknown): void {
+  if (type === 'new-mail') {
+    const evt = payload as { message?: Mail; profileIds?: string[] };
+    const mail = evt.message;
+    if (!mail) return;
+
+    const cur = getState();
+    // Profile nào nhận được mail này -> flash card/tab + toast riêng
+    if (evt.profileIds?.length) {
+      const known = cur.profiles.filter((p) => evt.profileIds!.includes(p.id));
+      for (const p of known) {
+        flashProfile(p.id);
+        const code = mail.otp;
+        toast(
+          `🤖 <b>${esc(p.name)}</b> vừa nhận mail` +
+            ` (${esc(mail.fromAddr)})` +
+            `<div class="text-gray-400 mt-0.5 text-[12px]">📌 ${esc(mail.subject || '(không có tiêu đề)')}</div>` +
+            (code ? `<div class="text-amber-300 mt-0.5 text-[12px]">🔑 OTP: <b>${esc(code)}</b></div>` : ''),
+          code ? 'otp' : 'info',
+        );
+      }
+      // Cập nhật badge unreadCount trên sidebar/card
+      loadProfiles();
+    }
+
+    if (cur.folder === 'sent' || cur.folder === 'mailboxes') {
+      loadMailboxes();
+      refreshStats();
+    } else if (cur.folder !== 'profiles') {
+      const inFilter =
+        !cur.mailboxFilter || cur.folder !== 'inbox' ||
+        mail.toAddr.toLowerCase().includes(cur.mailboxFilter.toLowerCase());
+      if (inFilter) loadMails();
+      else refreshStats();
+      const code = mail.otp;
+      toast(
+        `📥 <b>${esc(mail.subject || '(không có tiêu đề)')}</b>` +
+          (code ? `<div class="text-amber-300 text-lg mt-1">🔑 Mã OTP: <b>${esc(code)}</b></div>` : ''),
+        code ? 'otp' : 'info',
+      );
+    }
+
+    // Đánh dấu có dữ liệu mới để các danh sách mail (vd: tab Mail của Profile) tải lại
+    setState({ sseOnline: true, mailVersion: getState().mailVersion + 1 });
+  } else if (type === 'mail-updated' || type === 'mail-deleted' || type === 'mails-cleared') {
+    loadMails();
+  } else if (type === 'profiles-changed') {
+    loadProfiles();
+  }
+}
 
 export function connectSSE(): void {
   const es = new EventSource('/api/events');
+
+  // Server gửi event có tên (event: new-mail ...) -> bắt qua addEventListener
+  const types = ['new-mail', 'mail-updated', 'mail-deleted', 'mails-cleared', 'profiles-changed'] as const;
+  for (const t of types) {
+    es.addEventListener(t, (e: MessageEvent) => {
+      try {
+        handleSSEEvent(t, JSON.parse(e.data));
+      } catch {
+        /* dữ liệu không parse được -> bỏ qua */
+      }
+    });
+  }
+
+  // Fallback: event không tên (data: {...}) chứa { type, payload }
   es.onmessage = (e) => {
     let evt: { type: string; payload?: unknown };
     try {
@@ -338,31 +510,11 @@ export function connectSSE(): void {
     } catch {
       return;
     }
-    if (evt.type === 'new-mail') {
-      const mail = evt.payload as Mail;
-      const cur = getState();
-      if (cur.folder === 'sent' || cur.folder === 'mailboxes') {
-        loadMailboxes();
-        refreshStats();
-        return;
-      }
-      const inFilter =
-        !cur.mailboxFilter || cur.folder !== 'inbox' ||
-        mail.toAddr.toLowerCase().includes(cur.mailboxFilter.toLowerCase());
-      if (inFilter) loadMails();
-      else refreshStats();
-      const code = (mail as { otp?: string | null }).otp;
-      toast(
-        `📥 <b>${esc(mail.subject || '(không có tiêu đề)')}</b>` +
-          (code ? `<div class="text-amber-300 text-lg mt-1">🔑 Mã OTP: <b>${esc(code)}</b></div>` : ''),
-        code ? 'otp' : 'info',
-      );
-      setState({ sseOnline: true });
-    } else if (evt.type === 'mail-updated' || evt.type === 'mail-deleted' || evt.type === 'cleared') {
-      loadMails();
-    }
+    handleSSEEvent(evt.type, evt.payload);
   };
+
   es.onerror = () => setState({ sseOnline: false });
+  es.onopen = () => setState({ sseOnline: true });
 }
 
 /* ============ Tiện ích ============ */
