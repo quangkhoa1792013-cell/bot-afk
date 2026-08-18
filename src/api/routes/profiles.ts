@@ -11,11 +11,32 @@ import {
   listProfiles, getProfile, createProfile, updateProfile, deleteProfile,
 } from '../../profiles/profile.repository';
 import {
-  listMessages, countMessagesForEmail, countUnreadForEmail,
+  listMessages, countMessagesForEmail, countUnreadForEmail, createMailbox,
 } from '../../db/mail.repository';
 import { bus } from '../../events/bus';
 
 export const profilesRouter = Router();
+
+/** Tên mailbox hợp lệ (chuẩn địa chỉ hòm thư: chữ thường, số, . _ -). */
+const MAILBOX_NAME_RE = /^[a-z0-9][a-z0-9._-]{0,63}$/;
+
+/**
+ * Tự động tạo hòm thư cho assigned_email nếu chưa tồn tại.
+ * KHÔNG có bước này thì SMTP sẽ từ chối 550 mọi mail gửi tới email của Profile.
+ * Trả về tên mailbox (local part), ném Error('INVALID_MAILBOX') nếu tên không hợp lệ.
+ */
+function ensureMailboxForEmail(assignedEmail: string): string {
+  const mailboxName = assignedEmail.toLowerCase().split('@')[0];
+  if (!MAILBOX_NAME_RE.test(mailboxName)) {
+    throw new Error('INVALID_MAILBOX');
+  }
+  try {
+    createMailbox(mailboxName, `Hòm thư tự động tạo cho Profile`);
+  } catch (err) {
+    if (!(err instanceof Error && err.message === 'EXISTS')) throw err;
+  }
+  return mailboxName;
+}
 
 /** Email hợp lệ (chuẩn thông thường). */
 function isValidEmail(email: string): boolean {
@@ -57,6 +78,17 @@ profilesRouter.post('/', (req, res) => {
   }
   if (status !== undefined && status !== 'active' && status !== 'inactive') {
     return res.status(400).json({ error: 'status chỉ nhận "active" hoặc "inactive"' });
+  }
+
+  try {
+    ensureMailboxForEmail(assignedEmail);
+  } catch (err) {
+    if (err instanceof Error && err.message === 'INVALID_MAILBOX') {
+      return res.status(400).json({
+        error: `Phần trước @ của email (${String(assignedEmail).split('@')[0]}) không thể dùng làm địa chỉ hòm thư. Chỉ chấp nhận chữ thường, số, dấu chấm, gạch ngang, gạch dưới.`,
+      });
+    }
+    throw err;
   }
 
   try {
@@ -109,6 +141,20 @@ profilesRouter.patch('/:id', (req, res) => {
       return res.status(400).json({ error: 'status chỉ nhận "active" hoặc "inactive"' });
     }
     patch.status = status;
+  }
+
+  // Đổi email gán -> đảm bảo hòm thư của email mới được tạo
+  if (patch.assignedEmail !== undefined) {
+    try {
+      ensureMailboxForEmail(String(patch.assignedEmail));
+    } catch (err) {
+      if (err instanceof Error && err.message === 'INVALID_MAILBOX') {
+        return res.status(400).json({
+          error: 'Phần trước @ của email không thể dùng làm địa chỉ hòm thư (chỉ chữ thường, số, . _ -).',
+        });
+      }
+      throw err;
+    }
   }
 
   try {

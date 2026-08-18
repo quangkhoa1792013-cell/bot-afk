@@ -1,15 +1,4 @@
 {
   "version": 1,
-  "profiles": [
-    {
-      "id": "bf979aa7-83bd-4ca2-a4ed-0c5dfc30df13",
-      "name": "geasf",
-      "assignedEmail": "geasf@khoablabla.ddns.net",
-      "targetUrl": "https://discord.com/channels/@me",
-      "notes": "",
-      "status": "active",
-      "createdAt": 1787053977901,
-      "updatedAt": 1787053994195
-    }
-  ]
+  "profiles": []
 }

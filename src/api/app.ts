@@ -40,13 +40,9 @@ export function createApp(): express.Express {
   app.use('/api', eventsRouter);
 
   // Dashboard tĩnh: web/dist (sản phẩm của `npm run build`)
+  // Luôn mount (không kiểm tra lúc khởi động) để build xong là phục vụ ngay
   const webDist = path.join(ROOT_DIR, 'web', 'dist');
-  if (fs.existsSync(webDist)) {
-    app.use(express.static(webDist));
-  } else {
-    // Chưa build web -> nhắc nhở
-    console.warn('[web] Chưa tìm thấy web/dist — chạy `npm run build` trước, hoặc dùng `npm run dev` (UI ở :5173).');
-  }
+  app.use(express.static(webDist));
 
   // API không tồn tại -> 404 JSON
   app.use('/api', (_req, res) => res.status(404).json({ error: 'API không tồn tại' }));

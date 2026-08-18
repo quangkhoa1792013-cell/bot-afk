@@ -210,6 +210,75 @@ async function main() {
     }
     check('Mail tới địa chỉ đã xóa bị từ chối 550', rejected2);
 
+    // ============ 6. Profile (Web-in-Web) ============
+    console.log('\n== Profile: CRUD + auto-mailbox ==');
+    const pCreate = await apiJson('/profiles', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Discord Bot 01',
+        assignedEmail: `bot01@${DOMAIN}`,
+        targetUrl: 'http://localhost:8080',
+        notes: 'bot discord tự động hóa',
+        status: 'active',
+      }),
+    });
+    check('Tạo Profile 201', pCreate.status === 201, String(pCreate.status));
+    check('Profile có id/name/email', !!pCreate.data.id && pCreate.data.name === 'Discord Bot 01' && pCreate.data.assignedEmail === `bot01@${DOMAIN}`);
+
+    const pList = (await apiJson('/profiles')).data.profiles;
+    check('Profile hiện trong list', pList.some((p) => p.name === 'Discord Bot 01'));
+
+    // Auto-tạo mailbox cho assigned_email
+    const mbAfter = (await apiJson('/mailboxes')).data.mailboxes;
+    check('Mailbox bot01 tự động được tạo', mbAfter.some((m) => m.name === 'bot01'));
+
+    // Email gửi tới assigned_email của profile -> nhận được mail
+    await smtp.sendMail({
+      from: 'noreply@discord.com',
+      to: `bot01@${DOMAIN}`,
+      subject: 'Verify your bot token',
+      text: 'Your bot code is: 202699',
+    });
+    const pMails = (await apiJson(`/profiles/${pCreate.data.id}/mails`)).data.messages;
+    check('Mail tới email của Profile hiện trong /profiles/:id/mails', pMails.some((m) => m.otp === '202699'));
+    const pList2 = (await apiJson('/profiles')).data.profiles;
+    check('Profile có mailCount = 1', pList2.find((p) => p.id === pCreate.data.id)?.mailCount === 1);
+
+    // Sửa Profile
+    const pPatch = await apiJson(`/profiles/${pCreate.data.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ name: 'Discord Bot 02', status: 'inactive', targetUrl: '' }),
+    });
+    check('PATCH Profile 200', pPatch.status === 200, String(pPatch.status));
+    check('Đổi tên + inactive', pPatch.data.name === 'Discord Bot 02' && pPatch.data.status === 'inactive');
+
+    // Đổi email -> auto tạo mailbox mới
+    const pPatchEmail = await apiJson(`/profiles/${pCreate.data.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ assignedEmail: `bot02@${DOMAIN}` }),
+    });
+    check('PATCH đổi email 200', pPatchEmail.status === 200, String(pPatchEmail.status));
+    const mbAfter2 = (await apiJson('/mailboxes')).data.mailboxes;
+    check('Mailbox bot02 tự động được tạo khi đổi email', mbAfter2.some((m) => m.name === 'bot02'));
+
+    // Trùng tên / email
+    const pDup = await apiJson('/profiles', {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Discord Bot 02', assignedEmail: `bot03@${DOMAIN}` }),
+    });
+    check('Trùng tên -> 409', pDup.status === 409, String(pDup.status));
+    const pDupEmail = await apiJson('/profiles', {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Bot Khác', assignedEmail: `bot02@${DOMAIN}` }),
+    });
+    check('Trùng email -> 409', pDupEmail.status === 409, String(pDupEmail.status));
+
+    // Xóa Profile
+    const pDel = await apiJson(`/profiles/${pCreate.data.id}`, { method: 'DELETE' });
+    check('DELETE Profile 200', pDel.status === 200);
+    const pList3 = (await apiJson('/profiles')).data.profiles;
+    check('Profile đã xóa không còn trong list', !pList3.some((p) => p.id === pCreate.data.id));
+
     console.log(`\n== KẾT QUẢ: ${passed} passed, ${failed} failed ==`);
   } catch (err) {
     failed++;
