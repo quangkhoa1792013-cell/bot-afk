@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+html, body, #app {
+  height: 100%;
+}
+
+body {
+  @apply bg-[#0f1115] text-gray-200 antialiased;
+}
+
+/* Thanh cuộn gọn gàng kiểu Gmail */
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 4px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* Chip mã OTP sáng nổi bật */
+.otp-chip {
+  @apply inline-flex items-center gap-1 rounded-md border border-amber-400/40 bg-amber-400/10
+    px-1.5 py-0.5 font-mono text-[11px] font-bold tracking-wider text-amber-300;
+}
+
+/* Số OTP trong nội dung mail: nền vàng */
+.otp-strong {
+  background: rgba(251, 191, 36, 0.25);
+  border-radius: 4px;
+  padding: 0 3px;
+}
+
+/* Toasts */
+.toast-in {
+  animation: toast-in 0.25s ease-out;
+}
+@keyframes toast-in {
+  from { transform: translateY(-8px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* Empty state icon nhấp nhô */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+.float-slow {
+  animation: float 3s ease-in-out infinite;
+}
