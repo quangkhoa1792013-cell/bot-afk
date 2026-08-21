@@ -1,0 +1,36 @@
+# ~/.config/minebot/config.toml
+# Server cracked/offline: auth = offline, password bo trong
+
+[server]
+host = ""
+port = 25565
+version = "1.21.11"        # de trong "" neu muon tu dong do version
+
+[account]
+username = "MineBot"
+password = ""
+
+[bot]
+auto_reconnect = true
+reconnect_delay_ms = 5000
+spawn_wait_timeout_ms = 30000
+
+[movement]
+sprint = true              # vua chay vua nhay
+can_dig = false            # cho phep dao block chan duong
+allow_parkour = true       # nhay qua ho, troc block
+goal_tolerance = 1.0
+
+[auto_eat]
+enabled = true
+start_at_food = 14         # an khi no <= 14 (7 drumstick)
+low_health = 10            # an gap khi mau <= 10 (5 trai tim)
+banned_food = ["rotten_flesh", "pufferfish", "spider_eye", "poisonous_potato"]
+
+[viewer]
+enabled = true
+port = 3001                # http://localhost:3001 - goc nhin bot 3D
+first_person = true
+
+[ipc]
+# socket_path = "/run/user/1000/minebot/bot.sock"   # mac dinh tu XDG_RUNTIME_DIR

@@ -1,0 +1,19 @@
+{
+  "name": "@minebot/bot-core",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "mineflayer": "^4.20.0",
+    "mineflayer-pathfinder": "^2.4.5",
+    "prismarine-viewer": "^1.27.0",
+    "smol-toml": "^1.2.0",
+    "vec3": "^0.1.10"
+  }
+}

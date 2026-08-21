@@ -1,0 +1,23 @@
+[Unit]
+Description=MineBot - Minecraft bot daemon (Node.js/Mineflayer)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/node %h/.local/share/minebot/bot-core/dist/index.js --config %h/.config/minebot/config.toml
+Restart=on-failure
+RestartSec=4
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+Environment=RUST_LOG=info
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/.config/minebot %h/.local/share/minebot
+
+[Install]
+WantedBy=default.target

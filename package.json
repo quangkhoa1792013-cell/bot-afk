@@ -1,0 +1,20 @@
+{
+  "name": "minebot",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build:bot": "npm run build -w @minebot/bot-core",
+    "typecheck:bot": "npm run typecheck -w @minebot/bot-core",
+    "dev:bot": "npm run dev -w @minebot/bot-core",
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "tsx": "^4.16.0",
+    "typescript": "^5.5.0",
+    "@tauri-apps/cli": "^2.0.0"
+  }
+}

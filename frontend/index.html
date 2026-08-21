@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MineBot Control Panel</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header id="topbar">
+    <div id="brand">⛏ MineBot</div>
+    <div id="conn-badge" class="badge offline"><span class="dot"></span><span id="conn-text">Ngắt kết nối</span></div>
+    <div class="spacer"></div>
+    <div id="server-info">—</div>
+  </header>
+
+  <nav id="tabs">
+    <button class="tab active" data-tab="control">Điều khiển</button>
+    <button class="tab" data-tab="viewer">Viewer 3D</button>
+    <button class="tab" data-tab="config">Cấu hình</button>
+    <button class="tab" data-tab="logs">Log</button>
+  </nav>
+
+  <main>
+    <!-- TAB CONTROL -->
+    <section id="tab-control" class="panel active">
+      <div class="grid">
+        <div class="card">
+          <h3>Vị trí hiện tại</h3>
+          <div class="coords-live">
+            <div class="coord"><label>X</label><span id="pos-x">–</span></div>
+            <div class="coord"><label>Y</label><span id="pos-y">–</span></div>
+            <div class="coord"><label>Z</label><span id="pos-z">–</span></div>
+          </div>
+          <div class="mini-row">
+            <span id="moving-badge" class="chip">Đang đứng yên</span>
+            <span id="eating-badge" class="chip hidden">🍽 Đang ăn</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Sinh tồn</h3>
+          <div class="stat-row">
+            <label>❤ Máu</label>
+            <div class="bar"><div id="hp-bar" class="bar-fill hp"></div></div>
+            <span id="hp-num" class="stat-num">0/20</span>
+          </div>
+          <div class="stat-row">
+            <label>🍗 No</label>
+            <div class="bar"><div id="food-bar" class="bar-fill food"></div></div>
+            <span id="food-num" class="stat-num">0/20</span>
+          </div>
+          <div class="mini-row">
+            <span class="chip" id="deaths-chip">☠ Chết: 0</span>
+            <span class="chip" id="uptime-chip">⏱ 0s</span>
+          </div>
+          <p id="last-error" class="error hidden"></p>
+        </div>
+
+        <div class="card wide">
+          <h3>Di chuyển đến tọa độ</h3>
+          <div class="goto-row">
+            <div class="field">
+              <label for="gx">X</label>
+              <input id="gx" type="number" step="1" placeholder="100" />
+            </div>
+            <div class="field">
+              <label for="gy">Y</label>
+              <input id="gy" type="number" step="1" placeholder="64" />
+            </div>
+            <div class="field">
+              <label for="gz">Z</label>
+              <input id="gz" type="number" step="1" placeholder="-50" />
+            </div>
+            <button id="btn-go" class="btn primary">▶ Đi đến</button>
+            <button id="btn-stop" class="btn danger">■ Dừng</button>
+          </div>
+          <div class="quick-row">
+            <span class="hint">Tọa độ đã lưu:</span>
+            <div id="saved-list"></div>
+          </div>
+          <div class="save-row">
+            <input id="save-name" type="text" placeholder="Tên điểm (VD: Base)" />
+            <button id="btn-save-coord" class="btn small">💾 Lưu tọa độ đang nhập</button>
+            <button id="btn-copy-cur" class="btn small ghost">📋 Lấy vị trí hiện tại</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Kết nối bot</h3>
+          <div class="kv"><span>Tài khoản</span><b id="bot-username">—</b></div>
+          <div class="kv"><span>Phiên bản</span><b id="bot-version">—</b></div>
+          <div class="kv"><span>Server</span><b id="bot-server">—</b></div>
+          <div class="kv"><span>Chạy thử (mock)</span><b id="bot-mock">—</b></div>
+          <button id="btn-ping" class="btn ghost small">Ping IPC</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB VIEWER -->
+    <section id="tab-viewer" class="panel">
+      <div class="viewer-toolbar">
+        <button id="btn-open-viewer-window" class="btn primary">👁 Mở viewer (cửa sổ trình duyệt)</button>
+        <button id="btn-reload-viewer" class="btn ghost">↻ Tải lại khung nhúng</button>
+        <span id="viewer-url-label" class="hint">chưa có URL — bot cần connect server trước</span>
+      </div>
+      <iframe id="viewer-frame" class="hidden" title="Prismarine Viewer"></iframe>
+      <div id="viewer-placeholder" class="placeholder">
+        Viewer 3D sẽ hiển thị ở đây khi bot đã vào server.<br />
+        Prismarine-viewer render toàn bộ block texture xung quanh bot.
+      </div>
+    </section>
+
+    <!-- TAB CONFIG -->
+    <section id="tab-config" class="panel">
+      <div class="grid">
+        <div class="card">
+          <h3>Server &amp; tài khoản</h3>
+          <div class="form-row"><label>Host</label><input id="cfg-host" /></div>
+          <div class="form-row"><label>Port</label><input id="cfg-port" type="number" /></div>
+          <div class="form-row"><label>Phiên bản</label><input id="cfg-version" placeholder="1.21.11 (để trống = tự dò)" /></div>
+          <div class="form-row"><label>Tên bot</label><input id="cfg-username" /></div>
+        </div>
+
+        <div class="card">
+          <h3>Di chuyển</h3>
+          <div class="check-row"><input id="cfg-sprint" type="checkbox" /><label for="cfg-sprint">Vừa chạy vừa nhảy (sprint)</label></div>
+          <div class="check-row"><input id="cfg-parkour" type="checkbox" /><label for="cfg-parkour">Parkour / né hố, trèo block</label></div>
+          <div class="check-row"><input id="cfg-dig" type="checkbox" /><label for="cfg-dig">Cho phép đào block cản đường</label></div>
+          <div class="form-row"><label>Sai số dừng (block)</label><input id="cfg-tol" type="number" step="0.5" /></div>
+        </div>
+
+        <div class="card">
+          <h3>Tự động ăn</h3>
+          <div class="check-row"><input id="cfg-eat" type="checkbox" /><label for="cfg-eat">Bật auto-eat</label></div>
+          <div class="form-row"><label>Ăn khi no ≤</label><input id="cfg-startat" type="number" min="0" max="19" /></div>
+          <div class="form-row"><label>Ăn gấp khi máu ≤</label><input id="cfg-lowhp" type="number" min="0" max="20" /></div>
+        </div>
+
+        <div class="card">
+          <h3>Viewer 3D</h3>
+          <div class="check-row"><input id="cfg-viewer" type="checkbox" /><label for="cfg-viewer">Bật viewer</label></div>
+          <div class="form-row"><label>Port HTTP</label><input id="cfg-vport" type="number" /></div>
+        </div>
+
+        <div class="card wide">
+          <h3>Lưu cấu hình</h3>
+          <p class="hint">Ghi ra file TOML rồi khởi động lại tiến trình bot để áp dụng. Trong lúc chạy, ngưỡng ăn/di chuyển được gửi trực tiếp cho bot.</p>
+          <div class="mini-row">
+            <button id="btn-apply-runtime" class="btn ghost">⚡ Áp dụng runtime (không cần restart)</button>
+            <button id="btn-save-cfg" class="btn primary">💾 Ghi file config.toml</button>
+          </div>
+          <p id="cfg-status" class="hint"></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB LOGS -->
+    <section id="tab-logs" class="panel">
+      <div class="log-toolbar">
+        <button id="btn-clear-log" class="btn ghost small">Xóa log</button>
+        <span class="hint">Log realtime từ tiến trình bot (qua IPC)</span>
+      </div>
+      <pre id="log-box"></pre>
+    </section>
+  </main>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

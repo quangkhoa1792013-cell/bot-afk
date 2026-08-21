@@ -1,0 +1,314 @@
+{
+  "info": {
+    "id": "ses_fdc27a8c4ffeGx6ijC8ix95S8c",
+    "slug": "crisp-lagoon",
+    "projectID": "4ade49bd384d73448281fd410312199076dcf5b3",
+    "directory": "/home/khoablabla/move",
+    "path": "home/khoablabla/move",
+    "title": "Bot Minecraft tự di chuyển đến tọa độ có GUI",
+    "agent": "plan",
+    "model": {
+      "id": "nemotron-3-ultra-free",
+      "providerID": "opencode",
+      "variant": "default"
+    },
+    "version": "1.18.18",
+    "summary": {
+      "additions": 0,
+      "deletions": 0,
+      "files": 0
+    },
+    "cost": 0,
+    "tokens": {
+      "input": 6662,
+      "output": 202,
+      "reasoning": 185,
+      "cache": {
+        "read": 1856,
+        "write": 0
+      }
+    },
+    "time": {
+      "created": 1787307775803,
+      "updated": 1787324790783
+    }
+  },
+  "messages": [
+    {
+      "info": {
+        "role": "user",
+        "time": {
+          "created": 1787307775826
+        },
+        "agent": "build",
+        "model": {
+          "providerID": "opencode",
+          "modelID": "laguna-s-2.1-free",
+          "variant": "high"
+        },
+        "summary": {
+          "diffs": []
+        },
+        "id": "msg_023d85752001mfUD0Za0gnjsge",
+        "sessionID": "ses_fdc27a8c4ffeGx6ijC8ix95S8c"
+      },
+      "parts": [
+        {
+          "type": "text",
+          "text": "bn giup viet bot minecraft vao server de no di den toa do toi chi dinh ko\nva lam 1 gui de toi xem toa do\ntrruc tiep\nco the lamdang app thay vi web\nva de no chay ngam bang 1 cai j do\nva thay vat can thi no nhay qua hoac ne\nva neu doi sap chet den noi thi an\nva vua chay vua nhay\nneu can co the xem goc nhin no (hien day du block texture...)",
+          "id": "prt_023d85754001T6efPekA2uedqa",
+          "sessionID": "ses_fdc27a8c4ffeGx6ijC8ix95S8c",
+          "messageID": "msg_023d85752001mfUD0Za0gnjsge"
+        }
+      ]
+    },
+    {
+      "info": {
+        "parentID": "msg_023d85752001mfUD0Za0gnjsge",
+        "role": "assistant",
+        "mode": "build",
+        "agent": "build",
+        "variant": "high",
+        "path": {
+          "cwd": "/home/khoablabla/move",
+          "root": "/"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 8905,
+          "input": 6662,
+          "output": 202,
+          "reasoning": 185,
+          "cache": {
+            "write": 0,
+            "read": 1856
+          }
+        },
+        "modelID": "laguna-s-2.1-free",
+        "providerID": "opencode",
+        "time": {
+          "created": 1787307775845,
+          "completed": 1787307789238
+        },
+        "finish": "tool-calls",
+        "id": "msg_023d85765001A74SLVEhsoqsCQ",
+        "sessionID": "ses_fdc27a8c4ffeGx6ijC8ix95S8c"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "id": "prt_023d85de2001h8LoyfEYLyWbfr",
+          "sessionID": "ses_fdc27a8c4ffeGx6ijC8ix95S8c",
+          "messageID": "msg_023d85765001A74SLVEhsoqsCQ"
+        },
+        {
+          "type": "reasoning",
+          "text": "The user is asking me to help create a Minecraft bot that:\n1. Walks to specified coordinates\n2. Has a GUI to show coordinates\n3. Can be a desktop app instead of web\n4. Runs in background\n5. Jumps over obstacles or climbs them\n6. If stuck, attacks (eats food?)\n7. Can jump and run simultaneously\n8. Optionally view a first-person perspective with full blocks/textures\n\nThis is a complex task involving Minecraft botting. Let me break this down into steps:\n\n1. Find/create a Minecraft bot using mineflayer or prismarineJS\n2. Create a GUI application (Electron, Tauri, or similar)\n3. Implement pathfinding with navigation/movements\n4. Handle jumping and climbing mechanics\n5. Optional: First-person view rendering\n\nLet me start by exploring the current workspace and then plan the approach.",
+          "time": {
+            "start": 1787307777509,
+            "end": 1787307782705
+          },
+          "id": "prt_023d85de5001pIMGixEUrtq0xO",
+          "sessionID": "ses_fdc27a8c4ffeGx6ijC8ix95S8c",
+          "messageID": "msg_023d85765001A74SLVEhsoqsCQ"
+        },
+        {
+          "type": "text",
+          "text": "Tui hiểu rồi bạn ơi. Bạn muốn tạo một Minecraft bot có khả năng đi đến tọa độ chỉ định, có GUI, chạy ngầm, nhảy/quét vật cản, và tùy chọn có thể xem góc nhìn first-person.\n\nĐây là một dự án khá phức tạp. Tui sẽ giúp bạn xây dựng nó từng bước. Trước tiên, hãy xem workspace hiện tại và lên kế hoạch.",
+          "time": {
+            "start": 1787307782708,
+            "end": 1787307789229
+          },
+          "id": "prt_023d87234001QeEWM1JCs8Vz83",
+          "sessionID": "ses_fdc27a8c4ffeGx6ijC8ix95S8c",
+          "messageID": "msg_023d85765001A74SLVEhsoqsCQ"
+        },
+        {
+          "type": "tool",
+          "tool": "bash",
+          "callID": "chatcmpl-tool-0087a8e5f4b14241aede2e4ce87f8623",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "ls -la",
+              "workdir": "/home/khoablabla/move"
+            },
+            "output": "total 0\ndrwxr-xr-x 1 khoablabla khoablabla    0 Aug 21 17:21 .\ndrwx--x--x 1 khoablabla khoablabla 1946 Aug 21 15:17 ..\n",
+            "metadata": {
+              "output": "total 0\ndrwxr-xr-x 1 khoablabla khoablabla    0 Aug 21 17:21 .\ndrwx--x--x 1 khoablabla khoablabla 1946 Aug 21 15:17 ..\n",
+              "exit": 0,
+              "truncated": false
+            },
+            "title": "ls -la",
+            "time": {
+              "start": 1787307789211,
+              "end": 1787307789217
+            }
+          },
+          "id": "prt_023d8880e001QQTng3ZGbUDeGV",
+          "sessionID": "ses_fdc27a8c4ffeGx6ijC8ix95S8c",
+          "messageID": "msg_023d85765001A74SLVEhsoqsCQ"
+        },
+        {
+          "reason": "tool-calls",
+          "type": "step-finish",
+          "tokens": {
+            "total": 8905,
+            "input": 6662,
+            "output": 202,
+            "reasoning": 185,
+            "cache": {
+              "write": 0,
+              "read": 1856
+            }
+          },
+          "cost": 0,
+          "id": "prt_023d88bb1001RLpcGD1P91t9mv",
+          "sessionID": "ses_fdc27a8c4ffeGx6ijC8ix95S8c",
+          "messageID": "msg_023d85765001A74SLVEhsoqsCQ"
+        }
+      ]
+    },
+    {
+      "info": {
+        "parentID": "msg_023d85752001mfUD0Za0gnjsge",
+        "role": "assistant",
+        "mode": "build",
+        "agent": "build",
+        "variant": "high",
+        "path": {
+          "cwd": "/home/khoablabla/move",
+          "root": "/"
+        },
+        "cost": 0,
+        "tokens": {
+          "input": 0,
+          "output": 0,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        },
+        "modelID": "laguna-s-2.1-free",
+        "providerID": "opencode",
+        "time": {
+          "created": 1787307789243,
+          "completed": 1787307798397
+        },
+        "error": {
+          "name": "MessageAbortedError",
+          "data": {
+            "message": "Aborted"
+          }
+        },
+        "id": "msg_023d88bbb001kbv7NlCeBlD5Nj",
+        "sessionID": "ses_fdc27a8c4ffeGx6ijC8ix95S8c"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "id": "prt_023d88f95001Qzvgl1FdiJoMRA",
+          "sessionID": "ses_fdc27a8c4ffeGx6ijC8ix95S8c",
+          "messageID": "msg_023d88bbb001kbv7NlCeBlD5Nj"
+        },
+        {
+          "type": "text",
+          "text": "Workspace trống rậy. Tui sẽ đề xuất cấu trúc dự án:\n\n- **Backend**: Node.js + Mineflayer (Minecraft bot framework)\n- **Pathfinding**: mineflayer-pathfinding + mineflayer-nav\n- **GUI**: Electron (desktop app)\n- **First-person view**: mineflayer-viewer\n\nChương trình bạn muốn khá phức tạp. Để rõ hơn, mình hỏi vài câu nhé:",
+          "time": {
+            "start": 1787307790234,
+            "end": 1787307798136
+          },
+          "id": "prt_023d88f990010R60RIxl4lwRtC",
+          "sessionID": "ses_fdc27a8c4ffeGx6ijC8ix95S8c",
+          "messageID": "msg_023d88bbb001kbv7NlCeBlD5Nj"
+        },
+        {
+          "type": "tool",
+          "tool": "question",
+          "callID": "chatcmpl-tool-6568ffe1f55c40ef87746161d8503cdf",
+          "state": {
+            "status": "error",
+            "input": {},
+            "raw": "",
+            "error": "Tool execution aborted",
+            "metadata": {
+              "interrupted": true
+            },
+            "time": {
+              "start": 1787307798393,
+              "end": 1787307798393
+            }
+          },
+          "id": "prt_023d89aa5001hPgBdGxQCS24lB",
+          "sessionID": "ses_fdc27a8c4ffeGx6ijC8ix95S8c",
+          "messageID": "msg_023d88bbb001kbv7NlCeBlD5Nj"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "user",
+        "time": {
+          "created": 1787307801109
+        },
+        "agent": "plan",
+        "model": {
+          "providerID": "opencode",
+          "modelID": "nemotron-3-ultra-free"
+        },
+        "summary": {
+          "diffs": []
+        },
+        "id": "msg_023d8ba15001nTJ3YkZgk0hMX7",
+        "sessionID": "ses_fdc27a8c4ffeGx6ijC8ix95S8c"
+      },
+      "parts": [
+        {
+          "type": "text",
+          "text": "bn giup viet bot minecraft vao server de no di den toa do toi chi dinh ko\nva lam 1 gui de toi xem toa do\ntrruc tiep\nco the lamdang app thay vi web\nva de no chay ngam bang 1 cai j do\nva thay vat can thi no nhay qua hoac ne\nva neu doi sap chet den noi thi an\nva vua chay vua nhay\nneu can co the xem goc nhin no (hien day du block texture...)",
+          "id": "prt_023d8ba170010KqeDjGTtcR1KC",
+          "sessionID": "ses_fdc27a8c4ffeGx6ijC8ix95S8c",
+          "messageID": "msg_023d8ba15001nTJ3YkZgk0hMX7"
+        }
+      ]
+    },
+    {
+      "info": {
+        "parentID": "msg_023d8ba15001nTJ3YkZgk0hMX7",
+        "role": "assistant",
+        "mode": "plan",
+        "agent": "plan",
+        "path": {
+          "cwd": "/home/khoablabla/move",
+          "root": "/"
+        },
+        "cost": 0,
+        "tokens": {
+          "input": 0,
+          "output": 0,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        },
+        "modelID": "nemotron-3-ultra-free",
+        "providerID": "opencode",
+        "time": {
+          "created": 1787307801133,
+          "completed": 1787307802495
+        },
+        "error": {
+          "name": "MessageAbortedError",
+          "data": {
+            "message": "Aborted"
+          }
+        },
+        "id": "msg_023d8ba2d0025bxUJcWxyvsu5E",
+        "sessionID": "ses_fdc27a8c4ffeGx6ijC8ix95S8c"
+      },
+      "parts": []
+    }
+  ]
+}
