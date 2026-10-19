@@ -9,7 +9,6 @@
 backups/
 khoaddd/
 logs/
-/bin/
 __pycache__/
 **/__pycache__/
 caddy/runtime/

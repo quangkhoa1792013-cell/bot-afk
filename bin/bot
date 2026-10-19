@@ -1,0 +1,1156 @@
+#!/usr/bin/env bash
+# ============================================================================
+#  bot — quản lý MCC bot (bản v2)
+#
+#  - Bot có thể nằm ở BẤT KỲ thư mục nào. Danh sách bot (registry) nằm ở:
+#        $PROJECT_DIR/bots.conf        (mỗi dòng:  ten|thu_muc_chua_<ten>.sh)
+#    File này sửa tay được; 'bot add' / 'bot remove' cũng ghi vào đó.
+#    Lần đầu chạy, bot tự quét (bots/, */bots/, */bots/*/bots/) và seed registry.
+#
+#  - Mỗi bot gồm (không cần đủ hết, có gì dùng nấy):
+#        <tên>.sh          script chính (loop MinecraftClient)
+#        <tên>_tmux.sh     script tạo tmux (nếu có, 'start' sẽ chạy script này --bg)
+#        <tên>.ini         config MCC (đọc INI_SRC trong .sh nếu có)
+#        scripts/login_<tên>.txt   (tìm ở $PROJECT_DIR/scripts hoặc <botroot>/scripts)
+# ============================================================================
+
+BOT_VERSION="2.1"
+
+# --- tự resolve project gốc (chạy đúng cả khi gọi qua symlink) --------------
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+    DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+    SOURCE="$(readlink "$SOURCE")"
+    case "$SOURCE" in /*) ;; *) SOURCE="$DIR/$SOURCE" ;; esac
+done
+PROJECT_DIR="${BOT_PROJECT_DIR:-$(cd -P "$(dirname "$SOURCE")/.." && pwd)}"
+# fallback: nếu thư mục không giống project (ví dụ bị copy đi chỗ khác)
+if [ ! -f "$PROJECT_DIR/download.py" ] && [ ! -d "$PROJECT_DIR/bots" ] && [ -d "$HOME/geasf" ]; then
+    PROJECT_DIR="$HOME/geasf"
+fi
+
+REG_FILE="$PROJECT_DIR/bots.conf"
+DL_FLAG="$PROJECT_DIR/.download_on"
+DOWNLOAD_PY="$PROJECT_DIR/download.py"
+DL_PORT="${DOWNLOAD_PORT:-2013}"
+DEFAULT_TTYD_PORT=2014
+SHARED_SESSION="mc_bot"
+
+# --- màu (chỉ khi stdout là tty) --------------------------------------------
+if [ -t 1 ]; then
+    R=$'\033[0;31m'; G=$'\033[0;32m'; Y=$'\033[0;33m'; B=$'\033[0;34m'
+    M=$'\033[0;35m'; C=$'\033[0;36m'; D=$'\033[2m'; BR=$'\033[1m'; X=$'\033[0m'
+else
+    R=''; G=''; Y=''; B=''; M=''; C=''; D=''; BR=''; X=''
+fi
+say()  { printf '%b\n' "$*"; }
+ok()   { printf "${G}[✓]${X} %b\n" "$*"; }
+warn() { printf "${Y}[!]${X} %b\n" "$*"; }
+err()  { printf "${R}[✗]${X} %b\n" "$*" >&2; }
+dim()  { printf "${D}%b${X}\n" "$*"; }
+hr()   { printf -- "${D}--------------------------------------------------------------${X}\n"; }
+
+FORCE_YES=0
+confirm() { # confirm "câu hỏi" → 0 nếu yes
+    local ans
+    [ "$FORCE_YES" = 1 ] && return 0
+    if [ ! -t 0 ]; then warn "non-interactive → hủy (thêm -y để xác nhận sẵn)"; return 1; fi
+    read -r -p "$1 (y/N): " ans
+    [[ "$ans" =~ ^[Yy]$ ]]
+}
+trim() {
+    local s="$1"
+    s="${s#"${s%%[![:space:]]*}"}"
+    s="${s%"${s##*[![:space:]]}"}"
+    printf '%s' "$s"
+}
+
+# ============================================================================
+#  REGISTRY  (bots.conf: "ten|dir" mỗi dòng, # là comment)
+# ============================================================================
+REG_NAMES=(); REG_DIRS=()
+
+reg_load() {
+    REG_NAMES=(); REG_DIRS=()
+    [ -f "$REG_FILE" ] || return 0
+    local line name dir
+    while IFS= read -r line || [ -n "$line" ]; do
+        line="${line%%#*}"; line="$(trim "$line")"
+        [ -z "$line" ] && continue
+        case "$line" in *\|*) ;; *) continue ;; esac
+        name="$(trim "${line%%|*}")"; dir="$(trim "${line#*|}")"
+        [ -z "$name" ] && continue
+        reg_has "$name" && continue
+        REG_NAMES+=("$name"); REG_DIRS+=("$dir")
+    done < "$REG_FILE"
+}
+reg_index() {
+    local i
+    for i in "${!REG_NAMES[@]}"; do
+        [ "${REG_NAMES[$i]}" = "$1" ] && { echo "$i"; return 0; }
+    done
+    echo "-1"; return 1
+}
+reg_has()  { [ "$(reg_index "$1")" -ge 0 ] 2>/dev/null; }
+reg_dir()  {
+    local i; i="$(reg_index "$1")" || return 1
+    [ "$i" -ge 0 ] || return 1
+    printf '%s\n' "${REG_DIRS[$i]}"
+}
+reg_set() { # reg_set name dir  (thêm hoặc cập nhật)
+    local i; i="$(reg_index "$1")" || i=-1
+    if [ "$i" -ge 0 ]; then REG_DIRS[$i]="$2"
+    else REG_NAMES+=("$1"); REG_DIRS+=("$2"); fi
+}
+reg_del() {
+    local i; i="$(reg_index "$1")" || return 0
+    [ "$i" -ge 0 ] || return 0
+    unset 'REG_NAMES[i]'; unset 'REG_DIRS[i]'
+    REG_NAMES=("${REG_NAMES[@]}"); REG_DIRS=("${REG_DIRS[@]}")
+}
+reg_save() {
+    {
+        echo "# bots.conf — registry của lệnh 'bot' (mỗi dòng: ten|thu_muc_chua_<ten>.sh)"
+        echo "# Sửa tay được. 'bot add/remove' cũng ghi file này. # = comment."
+        local i
+        for i in "${!REG_NAMES[@]}"; do
+            echo "${REG_NAMES[$i]}|${REG_DIRS[$i]}"
+        done
+    } > "$REG_FILE"
+}
+
+# --- quét filesystem để seed registry (chỉ thêm, không bao giờ tự xóa) ------
+scan_fs_bots() { # in ra "name|dir"
+    local f b d seen="|"
+    for f in "$PROJECT_DIR"/bots/*.sh \
+             "$PROJECT_DIR"/*/bots/*.sh \
+             "$PROJECT_DIR"/*/*/bots/*.sh; do
+        [ -e "$f" ] || continue
+        b="$(basename "$f" .sh)"
+        case "$b" in *_tmux|*_backup|*_old|test_*) continue ;; esac
+        case "$seen" in *"|$b|"*) continue ;; esac
+        d="$(cd "$(dirname "$f")" && pwd)"
+        printf '%s|%s\n' "$b" "$d"
+        seen="$seen$b|"
+    done
+}
+registry_seed() {
+    local line name dir changed=0
+    while IFS= read -r line; do
+        [ -z "$line" ] && continue
+        name="${line%%|*}"; dir="${line#*|}"
+        if reg_has "$name"; then continue; fi
+        reg_set "$name" "$dir"; changed=1
+        say "${D}[*] registry: phát hiện bot mới '${BR}$name${X}${D}' ($dir) → đã thêm${X}"
+    done < <(scan_fs_bots)
+    [ "$changed" = 1 ] && reg_save
+    return 0
+}
+
+# ============================================================================
+#  RESOLVE thông tin từng bot (mọi thứ suy ra từ name + dir)
+# ============================================================================
+bot_sh()     { local d; d="$(reg_dir "$1")" && printf '%s/%s.sh\n' "$d" "$1"; }
+bot_tmux_sh(){ local d; d="$(reg_dir "$1")" && printf '%s/%s_tmux.sh\n' "$d" "$1"; }
+bot_ini() {  # ưu tiên INI_SRC khai báo trong <tên>.sh, rồi tới các vị trí quen thuộc
+    local name="$1" d src f
+    d="$(reg_dir "$name")" || return 1
+    src="$(grep -oP '^INI_SRC="\K[^"]+' "$d/$name.sh" 2>/dev/null | head -1)"
+    if [ -n "$src" ]; then
+        for f in "$PROJECT_DIR/$src" "$d/../$src" "$d/$src"; do
+            [ -f "$f" ] && { printf '%s\n' "$f"; return 0; }
+        done
+    fi
+    for f in "$d/$name.ini" "$d/../$name.ini" "$PROJECT_DIR/$name.ini"; do
+        [ -f "$f" ] && { printf '%s\n' "$f"; return 0; }
+    done
+    return 1
+}
+bot_login() { # script login: project/scripts hoặc <botroot>/scripts
+    local name="$1" d f
+    d="$(reg_dir "$name")" || return 1
+    for f in "$PROJECT_DIR/scripts/login_$name.txt" "$d/../scripts/login_$name.txt"; do
+        [ -f "$f" ] && { printf '%s\n' "$f"; return 0; }
+    done
+    return 1
+}
+bot_account() {
+    local d; d="$(reg_dir "$1")" || return 1
+    grep -oP '^ACCOUNT="\K[^"]+' "$d/$1.sh" 2>/dev/null | head -1
+}
+bot_server() {
+    local d; d="$(reg_dir "$1")" || return 1
+    grep -oP '^SERVER="\K[^"]+' "$d/$1.sh" 2>/dev/null | head -1
+}
+bot_ttyd_port() {
+    local t; t="$(bot_tmux_sh "$1")" || { echo "$DEFAULT_TTYD_PORT"; return 0; }
+    grep -oP '^TTYD_PORT=\K[0-9]+' "$t" 2>/dev/null | head -1 || true
+    echo ""
+}
+# (helper trên in thừa dòng trống — dùng bản gọn này)
+port_of() { # port_of <file> <key> <default>
+    local v=""
+    [ -f "$1" ] && v="$(grep -oP "^$2=\K[0-9]+" "$1" 2>/dev/null | head -1)"
+    [ -n "$v" ] && { echo "$v"; return 0; }
+    echo "$3"
+}
+
+# --- tmux -------------------------------------------------------------------
+sess_of() { # in "session" hoặc "session:winidx" nếu bot đang chạy
+    local name="$1" s="mc_$name" hit wname
+    if tmux has-session -t "=$s" 2>/dev/null; then echo "$s"; return 0; fi
+    # bot chạy dưới dạng window trong session chung: khớp command HOẶC tên window
+    hit="$(tmux list-panes -a -F '#{session_name}|#{window_index}|#{window_name}|#{pane_start_command}' 2>/dev/null \
+        | awk -F'|' -v n="$name" '$1=="'"$SHARED_SESSION"'" && ($4 ~ "(^|/)" n "\\.sh( |$|\")" || $3==n) {print $1":"$2; exit}')"
+    [ -n "$hit" ] && { echo "$hit"; return 0; }
+    hit="$(tmux list-panes -a -F '#{session_name}|#{window_name}|#{pane_start_command}' 2>/dev/null \
+        | grep -E "(^|/)${name}\.sh( |$|\")" | head -1 | cut -d'|' -f1 | tr -d '|')"
+    [ -n "$hit" ] && { echo "$hit"; return 0; }
+    return 1
+}
+pane_pid_of() {
+    local s; s="$(sess_of "$1")" || return 1
+    tmux list-panes -t "$s" -F '#{pane_pid}' 2>/dev/null | head -1
+}
+mcc_pid_of() { # pid tiến trình MinecraftClient của bot
+    local pp mcc
+    pp="$(pane_pid_of "$1")"
+    if [ -n "$pp" ]; then
+        mcc="$(pgrep -P "$pp" -f 'MinecraftClient' 2>/dev/null | head -1)"
+        [ -n "$mcc" ] && { echo "$mcc"; return 0; }
+    fi
+    pgrep -f "${1}_runtime\.ini" 2>/dev/null | head -1
+}
+ttyd_pid_for() { # pid ttyd đang attach vào bot này (theo mc_<tên> trong cmdline)
+    local name="$1" pid cl
+    for pid in $(pgrep -x ttyd 2>/dev/null); do
+        cl="$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null)"
+        case "$cl" in *"mc_$name "*) echo "$pid"; return 0 ;; esac
+    done
+    return 1
+}
+ttyd_user_for() {
+    local t; t="$(bot_tmux_sh "$1")" || return 1
+    grep -oP '^TTYD_USER="\K[^"]*' "$t" 2>/dev/null | head -1
+}
+dl_pid() { pgrep -f 'download\.py' 2>/dev/null | head -1; }
+
+# --- url --------------------------------------------------------------------
+lan_ip() {
+    local ip
+    ip="$(ip -4 addr show scope global 2>/dev/null | grep -oP 'inet \K[\d.]+' | head -1)"
+    [ -z "$ip" ] && ip="127.0.0.1"
+    echo "$ip"
+}
+public_url() {
+    local cf="$PROJECT_DIR/caddy/Caddyfile" dom=""
+    if [ -f "$cf" ]; then
+        dom="$(grep -oE '[a-z0-9.-]+\.(ddns\.net|duckdns\.org)' "$cf" | head -1)"
+        [ -z "$dom" ] && dom="$(grep -oE '^[[:space:]]*[a-z0-9][a-z0-9.-]+\.[a-z]{2,}[[:space:]]*\{' "$cf" | head -1 | tr -d ' {')"
+    fi
+    if [ -n "$dom" ]; then echo "https://$dom"
+    else echo "http://$(lan_ip):$DL_PORT"; fi
+}
+
+# ============================================================================
+#  LỆNH
+# ============================================================================
+cmd_help() {
+    cat <<HELP
+${BR}NAME${X}
+    bot — quản lý MCC bot (đa thư mục, dựa trên registry)
+
+${BR}SYNOPSIS${X}
+    bot [LỆNH] [TUỲ CHỌN]... [TÊN_BOT|all]...
+
+${BR}DESCRIPTION${X}
+    Quản lý vòng đời bot MinecraftClient: bật/tắt/khởi động lại, xem trạng
+    thái, thêm/xóa bot khỏi danh sách, bật tắt web download + tunnel, sửa
+    config, xem mọi thông tin.
+    Bot có thể nằm ở bất kỳ thư mục nào — mỗi bot chỉ cần <tên>.sh trong 1
+    thư mục. Danh sách bot lưu ở: ${C}$REG_FILE${X}
+
+${BR}COMMANDS${X}
+    ${C}start${X}   [-f] <bot|all>...  Bật bot chỉ định hoặc tất cả
+                              (-f: đè window cũ = khởi động lại)
+                              Mỗi bot là 1 window trong session chung
+                              ${BR}$SHARED_SESSION${X} — đỡ phải nhiều session
+    ${C}stop${X}    [-a] [-y] <bot|all>...
+                              Dừng bot + ${BR}toàn bộ thứ liên quan đến nó${X}
+                              (tmux, MCC, ttyd của bot đó). Bot khác giữ nguyên.
+                              all = dừng tất cả bot (giữ web download)
+                              -a  = dừng TOÀN BỘ luôn: mọi bot + web + ttyd
+                              -y  = không hỏi xác nhận
+    ${C}restart${X} <bot|all>...   Khởi động lại bot (stop → start)
+                              all cũng cách nhau 3s như 'start'
+    ${C}list, ls${X}                Danh sách bot trong registry
+    ${C}status${X} [bot|all]       Bảng trạng thái (run/pid/session/ttyd)
+    ${C}add${X}    <file.sh|dir>    Thêm bot vào danh sách (registry)
+                              (dir = thư mục chứa đúng 1 file <tên>.sh)
+    ${C}remove,rm${X} <bot|all> [--purge]
+                              Xóa khỏi danh sách (--purge: xóa luôn file +
+                              session + unit systemd; mặc định chỉ gỡ khỏi list)
+    ${C}download${X} <on|off|status|stop>
+                              MỌI THỨ trên 1 port :$DL_PORT:
+                                /          → portal
+                                /terminal/ → terminal (ttyd nội bộ)
+                                /download  → file (on/off)
+                              stop = tắt hẳn web + ttyd nội bộ
+                              (service mới → thêm path, không mở port mới)
+    ${C}tunnel${X} <on|off|status> Tunnel trycloudflare → internet vào :$DL_PORT
+                              on   = chạy cloudflared (bot tự quản, log ở
+                                     $TUNNEL_LOG)
+                              off  = tắt tunnel DO BOT quản (không đụng vào
+                                     tunnel chạy tay ngoài bot)
+                              Lưu ý: domain trycloudflare random mỗi lần on,
+                              chết theo process + reboot (miễn phí)
+    ${C}edit${X}   [bot|all]        Sửa config: account/server/ini/script/
+                              ttyd/port/đổi tên... (menu)
+    ${C}info${X}   [bot|all]        Xem TOÀN BỘ thông tin đã cung cấp về bot
+    ${C}attach${X} [bot]            Vào tmux (không tên → session chung)
+    ${C}doctor${X}                 Kiểm tra sức khỏe hệ thống bot
+    ${C}help${X}                   Trợ giúp này
+
+${BR}ALIASES${X}
+    ls=list   st|stat=status   rm|del=remove   dl=download   h|?=help
+    rst=restart   tn=tunnel
+
+${BR}MẶC ĐỊNH${X}
+    bot                nếu có đúng 1 bot → start nó, ngược lại → list
+    bot <tên>          = bot start <tên>
+
+${BR}FILES${X}
+    $REG_FILE      registry: mỗi dòng "tên|thư_mục_chứa_<tên>.sh"
+    $DL_FLAG   cờ bật /download
+    $TUNNEL_PID_FILE   pid tunnel do 'bot tunnel on' quản
+
+${BR}EXAMPLES${X}
+    bot start geasf
+    bot start all
+    bot stop geasf          # dừng geasf + tmux/ttyd của nó, bot khác giữ nguyên
+    bot stop all
+    bot stop -a             # tắt sạch: mọi bot + web download + ttyd
+    bot restart geasf       # khởi động lại 1 bot
+    bot restart all         # khởi động lại tất cả (cách nhau 3s)
+    bot add ./bots/botmoi.sh
+    bot add /path/thu_muc   # thư mục chứa đúng 1 file <tên>.sh
+    bot status all
+    bot download on
+    bot tunnel on           # mở tunnel internet → :$DL_PORT, in URL
+    bot edit geasf
+    bot info all
+HELP
+}
+
+fmt_size() { du -h "$1" 2>/dev/null | cut -f1; }
+fmt_time() { stat -c '%y' "$1" 2>/dev/null | cut -d. -f1; }
+short_path() { local p="${1//\/\/\//\/}"; echo "${p#"$PROJECT_DIR"/}"; }
+
+cmd_list() {
+    reg_load
+    local i n d run acc srv missing=""
+    say "${BR}Danh sách bot${X} (${D}registry: $(short_path "$REG_FILE")${X})"
+    hr
+    printf "${BR}%-10s %-8s %-12s %-10s %s${X}\n" "TÊN" "RUN" "ACCOUNT" "SERVER" "DIR/FILE"
+    for i in "${!REG_NAMES[@]}"; do
+        n="${REG_NAMES[$i]}"; d="${REG_DIRS[$i]}"
+        if [ -f "$d/$n.sh" ]; then missing=""
+        else missing="${Y} ⚠thiếu $n.sh${X}"; fi
+        local runf
+        if [ -n "$(sess_of "$n")" ]; then printf -v runf '%-7s' "on";  runf="${G}${runf}${X}"
+        else printf -v runf '%-7s' "off"; runf="${D}${runf}${X}"; fi
+        acc="$(bot_account "$n")"; [ -z "$acc" ] && acc="-"
+        srv="$(bot_server "$n")";  [ -z "$srv" ] && srv="-"
+        printf "%-10s %s %-12s %-10s %s%s\n" "$n" "$runf" "$acc" "$srv" "${D}$(short_path "$d")/${X}$n.sh" "$missing"
+    done
+    [ "${#REG_NAMES[@]}" = 0 ] && say "  ${D}(trống — dùng 'bot add <file.sh>' để thêm)${X}"
+    hr
+    dim "  start: bot start <tên>|all   •   restart: bot restart <tên>|all"
+    dim "  trạng thái: bot status all   •   chi tiết: bot info <tên>   •   tunnel: bot tunnel on"
+}
+
+cmd_status() {
+    reg_load
+    local targets=() a
+    for a in "$@"; do
+        case "$a" in all|ALL) targets+=("${REG_NAMES[@]}") ;; *) targets+=("$a") ;; esac
+    done
+    [ ${#targets[@]} = 0 ] && targets=("${REG_NAMES[@]}")
+    local n d run pid sess td dirshort
+    printf "${BR}%-10s %-5s %-8s %-14s %-6s %s${X}\n" "TÊN" "RUN" "PID" "SESSION" "TTYD" "DIR"
+    for n in "${targets[@]}"; do
+        if ! reg_has "$n"; then err "không có bot '$n' trong danh sách"; continue; fi
+        d="$(reg_dir "$n")"; dirshort="$(short_path "$d")"
+        sess="$(sess_of "$n")"
+        local runf
+        if [ -n "$sess" ]; then
+            printf -v runf '%-5s' "on";  runf="${G}${runf}${X}"
+            pid="$(mcc_pid_of "$n")"; [ -z "$pid" ] && pid="$(pane_pid_of "$n")"
+            [ -z "$pid" ] && pid="?"
+        else
+            printf -v runf '%-5s' "off"; runf="${D}${runf}${X}"; pid="-"; sess="-"
+        fi
+        td="$(ttyd_pid_for "$n")"; [ -z "$td" ] && td="-"
+        printf "%-10s %s %-8s %-14s %-6s %s\n" "$n" "$runf" "$pid" "$sess" "$td" "${D}$dirshort${X}"
+    done
+    [ ${#targets[@]} = 0 ] && say "  ${D}(không có bot — 'bot add' để thêm)${X}"
+    # ---- hạ tầng chung ----
+    local dlp ttyd_count flag
+    dlp="$(dl_pid)"; ttyd_count="$(pgrep -x ttyd 2>/dev/null | wc -l)"
+    [ -f "$DL_FLAG" ] && flag="${G}on${X}" || flag="${D}off${X}"
+    hr
+    if [ -n "$dlp" ]; then
+        say "web: ${G}chạy${X} (pid $dlp) — 1 port :$DL_PORT   /download: $flag   ttyd nội bộ: $ttyd_count"
+    else
+        say "web: ${D}tắt${X} (:$DL_PORT không có server)   /download: $flag   ttyd nội bộ: $ttyd_count"
+    fi
+    local tpid tpurl
+    tpid="$(tunnel_pid)"; [ -z "$tpid" ] && tpid="$(tunnel_pid_any)"
+    tpurl="$(tunnel_url)"
+    if [ -n "$tpid" ]; then
+        say "tunnel: ${G}chạy${X} (pid $tpid) ${D}${tpurl:+— }$tpurl${X}"
+    else
+        say "tunnel: ${D}tắt${X} ${D}('bot tunnel on' để mở)${X}"
+    fi
+    dim "  1 port duy nhất: $(public_url)/ • /terminal/ • /download — thêm gì cũng là path"
+}
+
+cmd_info() {
+    reg_load
+    local targets=() a
+    for a in "$@"; do
+        case "$a" in all|ALL) targets+=("${REG_NAMES[@]}") ;; *) targets+=("$a") ;; esac
+    done
+    if [ ${#targets[@]} = 0 ]; then targets=("${REG_NAMES[@]}"); fi
+    if [ ${#targets[@]} = 0 ]; then err "không có bot nào — 'bot add' để thêm"; return 1; fi
+    local n d sh tsh ini login acc srv pp mcc tp td maint
+    for n in "${targets[@]}"; do
+        if ! reg_has "$n"; then err "không có bot '$n' trong danh sách (bot ls để xem)"; continue; fi
+        d="$(reg_dir "$n")"; sh="$d/$n.sh"; tsh="$d/${n}_tmux.sh"
+        ini="$(bot_ini "$n" 2>/dev/null)"; login="$(bot_login "$n" 2>/dev/null)"
+        acc="$(bot_account "$n")"; srv="$(bot_server "$n")"
+        say "${BR}═══ bot: $n ═══${X}"
+        say "  Danh sách : ${G}có${X} (${D}$(short_path "$REG_FILE")${X})"
+        say "  Thư mục   : $d"
+        if [ -f "$sh" ]; then say "  Script    : $(short_path "$sh") ${D}($(fmt_size "$sh"), sửa $(fmt_time "$sh"))${X}"
+        else say "  Script    : ${R}$sh — THIẾU${X}"; fi
+        if [ -f "$tsh" ]; then say "  Tmux      : $(short_path "$tsh")"
+        else say "  Tmux      : ${D}(không có — start sẽ chạy thẳng $n.sh)${X}"; fi
+        if [ -n "$ini" ]; then
+            say "  INI       : $(short_path "$ini") ${D}($(fmt_size "$ini"))${X}"
+            say "  INI runtime: /tmp/${n}_runtime.ini ${D}(copy từ INI_SRC lúc chạy)${X}"
+        else say "  INI       : ${Y}không tìm thấy${X}"; fi
+        if [ -n "$login" ]; then
+            say "  Login     : $(short_path "$login") ${D}($(wc -l < "$login" 2>/dev/null) dòng)${X}"
+        else say "  Login     : ${D}(không có)${X}"; fi
+        say "  Account   : ${M}${acc:-?}${X}    Server: ${C}${srv:-?}${X}"
+        maint="$(grep -oP '^END_STR="\K[^"]+' "$sh" 2>/dev/null | head -1)"
+        [ -n "$maint" ] && say "  Bảo trì   : ngủ tới $maint hằng ngày"
+        pp="$(pane_pid_of "$n")"; mcc="$(mcc_pid_of "$n")"
+        if [ -n "$(sess_of "$n")" ]; then
+            say "  Session   : ${G}RUNNING${X} $(sess_of "$n") ${D}(pane=$pp, mcc=${mcc:-?})${X}"
+        else
+            say "  Session   : ${D}không chạy${X} (tên tmux dự kiến: mc_$n)"
+        fi
+        td="$(ttyd_pid_for "$n")"
+        if [ -n "$td" ]; then
+            say "  TTYD      : pid $td :$(port_of "$tsh" TTYD_PORT "$DEFAULT_TTYD_PORT") ${D}(user: $(ttyd_user_for "$n"))${X}"
+        else
+            say "  TTYD      : ${D}không chạy${X}"
+        fi
+        local dlp; dlp="$(dl_pid)"
+        if [ -n "$dlp" ]; then
+            say "  Web       : ${G}chạy${X} pid $dlp — 1 port :$DL_PORT   /download: $([ -f "$DL_FLAG" ] && echo on || echo off)"
+        else
+            say "  Web       : ${D}tắt${X} ${D}('bot download on' để mở)${X}"
+        fi
+        say "  URL       : $(public_url)/ ${D}• /terminal/ • /download${X}"
+        say ""
+    done
+}
+
+start_one() { # start_one <tên> [force]
+    local name="$1" force="${2:-0}" d sh sess
+    d="$(reg_dir "$name")" || { err "không có bot '$name' ('bot ls' để xem danh sách)"; return 1; }
+    sh="$d/$name.sh"
+    if [ ! -f "$sh" ]; then
+        err "bot '$name' thiếu file $sh"
+        dim "    file đã xóa? 'bot remove $name' để dọn registry, 'bot add' để thêm lại"
+        return 1
+    fi
+    sess="$(sess_of "$name")"
+    if [ -n "$sess" ]; then
+        if [ "$force" = 1 ]; then
+            warn "'$name' đang chạy ($sess) → khởi động lại (-f)"
+            stop_one "$name"
+        else
+            warn "'$name' đang chạy rồi ($sess) — bỏ qua. Dùng 'bot start -f $name' để khởi động lại."
+            return 0
+        fi
+    fi
+    say "${BR}▶ start $name${X} ${D}→ window trong session chung $SHARED_SESSION${X}"
+    if tmux has-session -t "=$SHARED_SESSION" 2>/dev/null; then
+        tmux new-window -t "$SHARED_SESSION" -n "$name" "bash $sh --inside-tmux" \
+            || { err "không tạo được window cho $name trong $SHARED_SESSION"; return 1; }
+    else
+        tmux new-session -d -s "$SHARED_SESSION" -n "$name" "bash $sh --inside-tmux" \
+            || { err "không tạo được session chung $SHARED_SESSION"; return 1; }
+    fi
+    tmux set-option -t "$SHARED_SESSION" allow-rename off 2>/dev/null
+    sleep 1
+    if [ -n "$(sess_of "$name")" ]; then
+        ok "$name đang chạy ${D}($(sess_of "$name")) — 'bot attach' để xem${X}"
+    else
+        warn "$name thoát ngay sau khi start — thử chạy trực tiếp: bash $sh"
+    fi
+}
+cmd_start() {
+    reg_load
+    local force=0 targets=() a
+    for a in "$@"; do
+        case "$a" in
+            -f|--force|-y) force=1 ;;
+            all|ALL) targets+=("${REG_NAMES[@]}") ;;
+            *) targets+=("$a") ;;
+        esac
+    done
+    if [ ${#targets[@]} = 0 ]; then
+        if [ "${#REG_NAMES[@]}" = 1 ]; then targets=("${REG_NAMES[@]}")
+        else err "dùng: bot start [-f] <bot|all>"; cmd_list; return 1; fi
+    fi
+    local n rc=0 first=1
+    for n in "${targets[@]}"; do
+        # nhiều bot bật cùng lúc → mỗi con cách 3s rồi vào (tránh login dồn bị kick)
+        if [ "$first" = 0 ]; then
+            say "${D}⏳ chờ 3s rồi vào bot tiếp theo...${X}"
+            sleep 3
+        fi
+        first=0
+        start_one "$n" "$force" || rc=1
+    done
+    return $rc
+}
+
+stop_one() { # dừng bot + MỌI THỨ LIÊN QUAN đến nó (bot khác không bị đụng tới)
+    local name="$1" d sess w pid cl stopped=0
+    d="$(reg_dir "$name")" 2>/dev/null
+    # 1) session riêng mc_<tên> HOẶC window trong session chung
+    sess="$(sess_of "$name")"
+    if [ -n "$sess" ]; then
+        case "$sess" in
+            *:*) # session:window → chỉ kill window đó (bot khác trong session chung giữ nguyên)
+                tmux kill-window -t "$sess" 2>/dev/null \
+                    && { ok "  tmux kill-window $sess ${D}(trong session chung)${X}"; stopped=1; } ;;
+            *)   tmux kill-session -t "=$sess" 2>/dev/null \
+                    && { ok "  tmux kill-session $sess"; stopped=1; } ;;
+        esac
+    fi
+    # 2) window của bot nằm chung session khác (vd mc_bot)
+    w="$(tmux list-panes -a -F '#{session_name}|#{window_index}|#{pane_start_command}' 2>/dev/null \
+        | grep -E "(^|/)${name}\.sh( |\$|\")" | cut -d'|' -f1,2 | tr '|' ':')"
+    if [ -n "$w" ]; then
+        while IFS= read -r t; do
+            [ -n "$t" ] || continue
+            tmux kill-window -t "$t" 2>/dev/null && { ok "  tmux kill-window $t"; stopped=1; }
+        done <<< "$w"
+    fi
+    # 3) tiến trình MCC còn sót (theo ini runtime của bot)
+    if pgrep -f "${name}_runtime\.ini" >/dev/null 2>&1; then
+        pkill -f "${name}_runtime\.ini" 2>/dev/null && { ok "  kill MinecraftClient (${name}_runtime.ini)"; stopped=1; }
+    fi
+    # 4) ttyd đang attach vào bot này
+    for pid in $(pgrep -x ttyd 2>/dev/null); do
+        cl="$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null)"
+        case "$cl" in
+            *"mc_$name "*|*"mc_$name")
+                kill "$pid" 2>/dev/null && { ok "  kill ttyd (pid $pid) của $name"; stopped=1; } ;;
+        esac
+    done
+    if [ "$stopped" = 0 ]; then
+        dim "  $name: không có gì đang chạy"
+    fi
+    return 0
+}
+stop_everything() { # -a: toàn bộ luôn — mọi bot + web + ttyd + mọi session mc_*
+    confirm "TẮT TOÀN BỘ? (mọi bot + web download + ttyd + mọi tmux mc_*)" || return 1
+    local n s
+    for n in "${REG_NAMES[@]}"; do
+        say "${BR}■ stop $n${X}"; stop_one "$n"
+    done
+    # session mc_* còn sót (kể cả không nằm trong registry) + session chung
+    for s in $(tmux ls -F '#{session_name}' 2>/dev/null | grep -E '^mc_'); do
+        tmux kill-session -t "=$s" 2>/dev/null && ok "tmux kill-session $s"
+    done
+    pkill -x ttyd 2>/dev/null && ok "kill toàn bộ ttyd"
+    pkill -f 'download\.py' 2>/dev/null && ok "kill web download"
+    rm -f "$DL_FLAG"
+    ok "Đã tắt toàn bộ."
+}
+cmd_stop() {
+    reg_load
+    local all_infra=0 targets=() a
+    for a in "$@"; do
+        case "$a" in
+            -a|--all|-A) all_infra=1 ;;
+            -y|--yes) FORCE_YES=1 ;;
+            all|ALL) targets+=("${REG_NAMES[@]}") ;;
+            *) targets+=("$a") ;;
+        esac
+    done
+    if [ "$all_infra" = 1 ]; then stop_everything; return $?; fi
+    if [ ${#targets[@]} = 0 ]; then
+        err "dùng: bot stop [-a] [-y] <bot|all>"
+        dim "  bot stop <tên>   → dừng bot đó + mọi thứ liên quan (bot khác giữ nguyên)"
+        dim "  bot stop all     → dừng tất cả bot (giữ web download)"
+        dim "  bot stop -a      → tắt toàn bộ luôn (bot + web + ttyd)"
+        cmd_list; return 1
+    fi
+    local n
+    for n in "${targets[@]}"; do
+        say "${BR}■ stop $n${X}"; stop_one "$n"
+    done
+}
+
+# ============================================================================
+#  RESTART  (stop rồi start lại — 1 bot hoặc all, stagger như start)
+# ============================================================================
+cmd_restart() {
+    reg_load
+    local force=1 targets=() a
+    for a in "$@"; do
+        case "$a" in
+            -f|--force|-y) force=1 ;;
+            all|ALL) targets+=("${REG_NAMES[@]}") ;;
+            *) targets+=("$a") ;;
+        esac
+    done
+    if [ ${#targets[@]} = 0 ]; then
+        if [ "${#REG_NAMES[@]}" = 1 ]; then targets=("${REG_NAMES[@]}")
+        else err "dùng: bot restart <bot|all>"; cmd_list; return 1; fi
+    fi
+    local n rc=0 first=1
+    for n in "${targets[@]}"; do
+        if ! reg_has "$n"; then err "không có bot '$n' trong danh sách"; rc=1; continue; fi
+        say "${BR}⟳ restart $n${X} ${D}(stop → start)${X}"
+        stop_one "$n"   # stop là stop ngay, không chờ
+        # nhiều bot restart cùng lúc → cách nhau 3s như 'start' (tránh login dồn bị kick)
+        if [ "$first" = 0 ]; then
+            say "${D}⏳ chờ 3s rồi vào bot tiếp theo...${X}"
+            sleep 3
+        fi
+        first=0
+        start_one "$n" "$force" || rc=1
+    done
+    return $rc
+}
+
+cmd_add() {
+    reg_load
+    local p="$1"
+    if [ -z "$p" ]; then
+        err "dùng: bot add <file.sh|thư_mục>"
+        dim "  file.sh  → bot tên = tên file; thư mục = nơi chứa nó"
+        dim "  thư_mục  → thư mục chứa đúng 1 file <tên>.sh (không tính *_tmux.sh)"
+        return 1
+    fi
+    # thư mục → tìm đúng 1 file .sh ứng viên
+    if [ -d "$p" ]; then
+        local c=() f
+        for f in "$p"/*.sh; do
+            [ -e "$f" ] || continue
+            case "$(basename "$f" .sh)" in *_tmux|*_backup|*_old|test_*) continue ;; esac
+            c+=("$f")
+        done
+        if [ ${#c[@]} = 1 ]; then p="${c[0]}"
+        else err "'$p' phải chứa đúng 1 file <tên>.sh (thấy ${#c[@]})"; return 1; fi
+    fi
+    [ -f "$p" ] || { err "không thấy file '$p'"; return 1; }
+    p="$(readlink -f "$p")"
+    local name dir
+    name="$(basename "$p" .sh)"
+    case "$name" in *_tmux|*_backup|*_old|test_*) err "tên bot không hợp lệ: $name"; return 1 ;; esac
+    dir="$(dirname "$p")"
+    if reg_has "$name"; then
+        local old; old="$(reg_dir "$name")"
+        if [ "$old" = "$dir" ]; then warn "'$name' đã có trong danh sách rồi ($dir)"; return 0; fi
+        warn "'$name' đã có với thư mục cũ: $old"
+        confirm "Cập nhật sang $dir?" || return 1
+    fi
+    reg_set "$name" "$dir"; reg_save
+    ok "đã thêm '${BR}$name${X}' → $dir"
+    dim "  thử: bot info $name • bot start $name"
+    dim "  (muốn tạo bot mới hoàn chỉnh từ đầu: chạy install.sh)"
+}
+
+purge_one() { # xóa hẳn file + session + unit systemd của bot
+    local name="$1" d sh tsh ini login f
+    d="$(reg_dir "$name")" 2>/dev/null
+    stop_one "$name"
+    if [ -n "$d" ]; then
+        sh="$d/$name.sh"; tsh="$d/${name}_tmux.sh"; ini="$(bot_ini "$name" 2>/dev/null)"
+        for f in "$sh" "$tsh" "$ini" "/tmp/${name}_runtime.ini"; do
+            [ -e "$f" ] || continue
+            rm -f "$f" && ok "  rm $(short_path "$f")"
+        done
+        for f in "$PROJECT_DIR/scripts/login_$name.txt" "$d/../scripts/login_$name.txt"; do
+            [ -f "$f" ] && { rm -f "$f" && ok "  rm $(short_path "$f")"; }
+        done
+    fi
+    f="$HOME/.config/systemd/user/mc-$name.service"
+    [ -f "$f" ] && { rm -f "$f" && ok "  rm $(short_path "$f")"; }
+    if sudo -n true 2>/dev/null && [ -f "/etc/systemd/system/mc-$name.service" ]; then
+        sudo rm -f "/etc/systemd/system/mc-$name.service" && ok "  rm /etc/systemd/system/mc-$name.service"
+    fi
+    systemctl --user daemon-reload 2>/dev/null
+    return 0
+}
+cmd_remove() {
+    reg_load
+    local purge=0 targets=() a
+    for a in "$@"; do
+        case "$a" in --purge|-p) purge=1 ;; -y|--yes) FORCE_YES=1 ;; all|ALL) targets+=("${REG_NAMES[@]}") ;; *) targets+=("$a") ;; esac
+    done
+    if [ ${#targets[@]} = 0 ]; then err "dùng: bot remove <bot|all> [--purge]"; cmd_list; return 1; fi
+    local n rc=0
+    for n in "${targets[@]}"; do
+        if ! reg_has "$n"; then err "không có bot '$n' trong danh sách"; rc=1; continue; fi
+        if [ "$purge" = 1 ]; then
+            confirm "XÓA HẲN bot '$n' (file + session + systemd)?" || { warn "bỏ qua $n"; continue; }
+            purge_one "$n"
+            ok "đã xóa hẳn bot '$n'"
+        else
+            confirm "Gỡ '$n' khỏi danh sách? (file giữ nguyên)" || { warn "bỏ qua $n"; continue; }
+            ok "đã gỡ '$n' khỏi danh sách ${D}(file vẫn còn — 'bot add' thêm lại được)${X}"
+        fi
+        reg_del "$n"
+    done
+    reg_save
+    return $rc
+}
+
+ensure_web_stack() { # 1 PORT DUY NHẤT :2013 — ttyd chỉ nội bộ để proxy path /terminal/
+    if ! ss -tlnp 2>/dev/null | grep -q ":$DL_PORT "; then
+        say "[*] khởi động web :$DL_PORT (1 port duy nhất, bind ${BIND_HOST:-0.0.0.0}) ..."
+        setsid nohup env BIND_HOST="${BIND_HOST:-0.0.0.0}" python3 "$DOWNLOAD_PY" \
+            >> "/tmp/download-$DL_PORT.log" 2>&1 < /dev/null &
+        disown 2>/dev/null
+        sleep 1
+    fi
+    local tport="${TTYD_PORT:-$DEFAULT_TTYD_PORT}"
+    if command -v ttyd >/dev/null 2>&1 && ! ss -tlnp 2>/dev/null | grep -q ":$tport "; then
+        say "[*] khởi động ttyd NỘI BỘ :$tport ${D}(chỉ 127.0.0.1 — phục vụ path /terminal/ qua :$DL_PORT)${X} ..."
+        setsid nohup ttyd -i 127.0.0.1 -p "$tport" -b /terminal/ -t fontSize=15 -W \
+            bash -c "while true; do tmux attach-session -t $SHARED_SESSION 2>/dev/null || (clear; echo '=== CHỜ BOT ==='; sleep 5); done" \
+            >> "/tmp/ttyd-$tport.log" 2>&1 < /dev/null &
+        disown 2>/dev/null
+        sleep 0.5
+    fi
+}
+cmd_download() {
+    local sub="${1:-status}" url pid
+    url="$(public_url)"
+    case "$sub" in
+        on)
+            touch "$DL_FLAG"
+            ensure_web_stack
+            if ss -tlnp 2>/dev/null | grep -q ":$DL_PORT "; then
+                ok "1-port :$DL_PORT → $url/ ${D}• /terminal/${X} • ${BR}$url/download${X}"
+            else
+                err "không nghe được :$DL_PORT — xem log /tmp/download-$DL_PORT.log"
+                return 1
+            fi
+            ;;
+        off)
+            rm -f "$DL_FLAG"
+            ok "/download đã TẮT ${D}(web vẫn chạy — / vào portal/ttyd; tắt hẳn server: 'bot download stop')${X}"
+            ;;
+        stop)
+            pid="$(dl_pid)"
+            if [ -n "$pid" ]; then
+                kill "$pid" && ok "đã tắt web download (pid $pid)"
+            else
+                dim "web không chạy"
+            fi
+            local tport="${TTYD_PORT:-$DEFAULT_TTYD_PORT}" tp tcl
+            for tp in $(pgrep -x ttyd 2>/dev/null); do
+                tcl="$(tr '\0' ' ' < "/proc/$tp/cmdline" 2>/dev/null)"
+                case "$tcl" in *"-p $tport "*)
+                    kill "$tp" 2>/dev/null && ok "đã tắt ttyd (pid $tp, :$tport)" ;;
+                esac
+            done
+            ;;
+        status)
+            pid="$(dl_pid)"
+            if [ -f "$DL_FLAG" ]; then flag="${G}on${X}"; else flag="${D}off${X}"; fi
+            local tport="${TTYD_PORT:-$DEFAULT_TTYD_PORT}"
+            if [ -n "$pid" ]; then
+                say "web     : ${G}chạy${X} (pid $pid) — ${BR}1 port duy nhất :$DL_PORT${X}"
+            else
+                say "web     : ${D}tắt${X} ${D}('bot download on' để mở)${X}"
+            fi
+            if ss -tlnp 2>/dev/null | grep -q ":$tport "; then
+                say "ttyd    : ${G}nội bộ${X} :$tport ${D}(chỉ 127.0.0.1 — vào qua path /terminal/)${X}"
+            else
+                say "ttyd    : ${D}tắt${X} ${D}('bot download on' tự bật)${X}"
+            fi
+            say "/download: $flag ${D}('bot download on|off')${X}"
+            say "paths   :"
+            say "  $url/            ${D}→ portal${X}"
+            say "  $url/terminal/   ${D}→ terminal (ttyd)${X}"
+            say "  $url/download    ${D}→ tải file${X}"
+            say "${D}  (muốn thêm service khác → thêm path trong download.py, KHÔNG mở port mới)${X}"
+            ;;
+        *) err "dùng: bot download <on|off|status|stop>"; return 1 ;;
+    esac
+}
+
+# ============================================================================
+#  TUNNEL  (cloudflared quick tunnel → internet vào :$DL_PORT, như mọi lệnh khác)
+# ============================================================================
+TUNNEL_LOG="/tmp/cloudflared-$DL_PORT.log"
+TUNNEL_PID_FILE="$PROJECT_DIR/.tunnel_pid"
+tunnel_pid() { # PID do 'bot tunnel on' quản (ghi ở .tunnel_pid, còn sống + đúng cloudflared)
+    local pid cl
+    [ -f "$TUNNEL_PID_FILE" ] || return 1
+    pid="$(cat "$TUNNEL_PID_FILE" 2>/dev/null)"
+    [ -n "$pid" ] || { rm -f "$TUNNEL_PID_FILE"; return 1; }
+    [ -r "/proc/$pid/cmdline" ] || { rm -f "$TUNNEL_PID_FILE"; return 1; }
+    cl="$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null)"
+    if [ -n "$cl" ] && [[ "$cl" == *cloudflared* ]] && [[ "$cl" == *":$DL_PORT"* ]]; then
+        echo "$pid"; return 0
+    fi
+    rm -f "$TUNNEL_PID_FILE"   # pid chết rồi → dọn file cũ
+    return 1
+}
+tunnel_pid_any() { # PID cloudflared BẤT KỲ (kể cả chạy tay ngoài bot)
+    pgrep -x cloudflared 2>/dev/null | head -1
+}
+tunnel_url() { # URL trycloudflare mới nhất trong log
+    [ -f "$TUNNEL_LOG" ] || return 1
+    grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$TUNNEL_LOG" 2>/dev/null | tail -1
+}
+cmd_tunnel() {
+    reg_load
+    local sub="${1:-status}" pid url
+    case "$sub" in
+        on)
+            pid="$(tunnel_pid)"
+            if [ -n "$pid" ]; then
+                warn "tunnel đã chạy rồi (pid $pid)"
+                url="$(tunnel_url)"
+                [ -n "$url" ] && ok "$url"
+                return 0
+            fi
+            if [ -n "$(tunnel_pid_any)" ]; then
+                err "đã có cloudflared chạy NGOÀI bot (pid $(tunnel_pid_any)) — 'bot tunnel on' không mở thêm"
+                dim "  URL của nó xem trong terminal nơi nó chạy, hoặc: pkill -x cloudflared rồi 'bot tunnel on'"
+                return 1
+            fi
+            [ -n "$(dl_pid)" ] || ensure_web_stack
+            if ! ss -tlnp 2>/dev/null | grep -q ":$DL_PORT "; then
+                err ":$DL_PORT chưa nghe — chạy 'bot download on' trước đã"
+                return 1
+            fi
+            command -v cloudflared >/dev/null 2>&1 \
+                || { err "chưa cài cloudflared — xem https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/"; return 1; }
+            : > "$TUNNEL_LOG"
+            say "[*] mở tunnel trycloudflare → http://localhost:$DL_PORT ..."
+            setsid nohup cloudflared tunnel --protocol http2 \
+                --url "http://localhost:$DL_PORT" \
+                --no-autoupdate >> "$TUNNEL_LOG" 2>&1 < /dev/null &
+            disown 2>/dev/null
+            echo "$!" > "$TUNNEL_PID_FILE"
+            # đợi URL xuất hiện trong log (tối đa ~15s)
+            local i=0
+            while [ $i -lt 30 ]; do
+                sleep 0.5; i=$((i+1))
+                url="$(tunnel_url)"; [ -n "$url" ] && break
+            done
+            if [ -n "$(tunnel_pid)" ] && [ -n "${url:-}" ]; then
+                ok "tunnel đang chạy (pid $(tunnel_pid)) — log: $TUNNEL_LOG"
+                say ""
+                say "  ${BR}$url${X}   ${D}→ / • /terminal/ • /download${X}"
+            elif [ -n "$(tunnel_pid)" ]; then
+                ok "tunnel đang chạy (pid $(tunnel_pid)) — URL sẽ hiện trong $TUNNEL_LOG"
+                dim "  xem: bot tunnel status"
+            else
+                err "cloudflared thoát ngay — xem log: $TUNNEL_LOG"
+                tail -5 "$TUNNEL_LOG" 2>/dev/null | sed 's/^/    /'
+                return 1
+            fi
+            ;;
+        off)
+            pid="$(tunnel_pid)"
+            if [ -z "$pid" ]; then
+                if [ -n "$(tunnel_pid_any)" ]; then
+                    warn "tunnel đang chạy NHƯNG không do 'bot tunnel' quản — 'bot tunnel off' không đụng vào nó"
+                    dim "  tự tắt tay nếu muốn: pkill -x cloudflared"
+                else
+                    dim "tunnel không chạy"
+                fi
+                return 0
+            fi
+            kill "$pid" 2>/dev/null && ok "đã tắt tunnel (pid $pid) ${D}— domain trycloudflare cũng hết (lần sau domain mới)${X}"
+            # cloudflared tắt chậm (graceful) → chờ tối đa 5s, quá thì SIGKILL
+            local i=0
+            while [ $i -lt 10 ] && kill -0 "$pid" 2>/dev/null; do sleep 0.5; i=$((i+1)); done
+            if kill -0 "$pid" 2>/dev/null; then
+                kill -9 "$pid" 2>/dev/null && warn "phải SIGKILL (pid $pid)"
+            fi
+            rm -f "$TUNNEL_PID_FILE"
+            ;;
+        status)
+            pid="$(tunnel_pid)"; local any; any="$(tunnel_pid_any)"; url="$(tunnel_url)"
+            if [ -n "$pid" ]; then
+                say "tunnel : ${G}chạy${X} (pid $pid, do bot quản) ${D}— log: $TUNNEL_LOG${X}"
+            elif [ -n "$any" ]; then
+                say "tunnel : ${Y}chạy tay ngoài bot${X} (pid $any) ${D}— 'bot tunnel off' không đụng vào nó${X}"
+            else
+                say "tunnel : ${D}tắt${X} ${D}('bot tunnel on' để mở)${X}"
+            fi
+            # URL chỉ hiện khi process còn sống (log cũ không in lại)
+            if [ -n "$any" ] && [ -n "$url" ]; then
+                say "URL    : ${BR}$url${X} ${D}→ / • /terminal/ • /download${X}"
+            fi
+            if [ -n "$pid" ] && [ -z "$url" ]; then
+                warn "chưa thấy URL trong log — cloudflared có thể chưa nối xong, thử lại sau"
+            fi
+            ;;
+        *) err "dùng: bot tunnel <on|off|status>"; return 1 ;;
+    esac
+}
+
+open_edit() {
+    local f="$1"
+    [ -f "$f" ] || { err "không thấy $f"; return 1; }
+    "${EDITOR:-nano}" "$f"
+}
+set_sh_var() { # set_sh_var <file> <KEY> <"giá trị">
+    local f="$1" k="$2" v="$3"
+    [ -f "$f" ] || { err "không thấy $f"; return 1; }
+    if grep -qE "^${k}=" "$f"; then
+        sed -i "s|^${k}=.*|${k}=\"${v}\"|" "$f"
+    else
+        printf '%s="%s"\n' "$k" "$v" >> "$f"
+    fi
+    ok "  $k → \"$v\"  ${D}($(short_path "$f"))${X}"
+}
+rename_bot() { # đổi tên bot: file + tham chiếu + registry
+    local old="$1" d new f
+    d="$(reg_dir "$old")" || return 1
+    read -r -p "Tên mới cho '$old': " new
+    [ -z "$new" ] && { dim "hủy"; return 1; }
+    [ "$new" = "$old" ] && { dim "trùng tên cũ"; return 1; }
+    case "$new" in *[\ /]*|*_tmux|*_backup|test_*) err "tên không hợp lệ"; return 1 ;; esac
+    if [ -n "$(sess_of "$old")" ]; then
+        warn "'$old' đang chạy → nên stop trước khi đổi tên"
+        confirm "Stop '$old' bây giờ?" && stop_one "$old"
+    fi
+    confirm "Đổi '$old' → '$new'?" || return 1
+    for f in "$d/$old.sh" "$d/${old}_tmux.sh" "$d/$old.ini"; do
+        [ -e "$f" ] || continue
+        local nf="${f/$old/$new}"
+        mv -v "$f" "$nf" | sed 's/^/  /'
+    done
+    for f in "$PROJECT_DIR/scripts/login_$old.txt" "$d/../scripts/login_$old.txt"; do
+        [ -f "$f" ] && mv -v "$f" "${f/$old/$new}" | sed 's/^/  /'
+    done
+    # sửa tham chiếu bên trong (nhắm đúng các mẫu, không đụng account/server)
+    for f in "$d/$new.sh" "$d/${new}_tmux.sh" "$d/$new.ini"; do
+        [ -f "$f" ] || continue
+        sed -i -E \
+            -e "s/mc_${old}([^a-zA-Z0-9_]|$)/mc_${new}\1/g" \
+            -e "s/${old}_tmux\.sh/${new}_tmux.sh/g" \
+            -e "s/${old}_runtime\.ini/${new}_runtime.ini/g" \
+            -e "s|(^|/)${old}\.ini|\1${new}.ini|g" \
+            -e "s|(^|/)${old}\.sh|\1${new}.sh|g" \
+            -e "s/login_${old}/login_${new}/g" \
+            "$f"
+    done
+    reg_set "$new" "$d"; reg_del "$old"; reg_save
+    ok "đã đổi tên '$old' → '$new' ${D}(kiểm tra lại ACCOUNT/SERVER bằng 'bot info $new')${X}"
+}
+edit_one() {
+    local b="$1" d sh tsh ini login
+    d="$(reg_dir "$b")" || { err "không có bot '$b'"; return 1; }
+    sh="$d/$b.sh"; tsh="$d/${b}_tmux.sh"; ini="$(bot_ini "$b" 2>/dev/null)"; login="$(bot_login "$b" 2>/dev/null)"
+    local ch cur
+    while true; do
+        say ""
+        say "${BR}═══ EDIT $b ═══${X}"
+        say "  1) Account        : ${M}$(bot_account "$b")${X}"
+        say "  2) Server         : ${C}$(bot_server "$b")${X}"
+        say "  3) INI path       : ${D}$(short_path "${ini:-?}")${X}"
+        say "  4) Sửa INI        : ${D}${EDITOR:-nano} $(short_path "${ini:-?}")${X}"
+        say "  5) Sửa login      : ${D}${EDITOR:-nano} $(short_path "${login:-?}")${X}"
+        say "  6) TTYD user/pass : ${D}$(ttyd_user_for "$b" 2>/dev/null)${X}"
+        say "  7) Ports          : web=$(port_of "$tsh" PORT "$DL_PORT") ttyd=$(port_of "$tsh" TTYD_PORT "$DEFAULT_TTYD_PORT")"
+        say "  8) Đổi tên bot"
+        say "  9) Sửa $b.sh     ${D}(editor)${X}"
+        say " 10) Sửa ${b}_tmux.sh ${D}(editor)${X}"
+        say "  0) Thoát"
+        read -r -p "chọn: " ch
+        case "$ch" in
+            1) read -r -p "Account mới [$(bot_account "$b")]: " cur
+               [ -n "$cur" ] && set_sh_var "$sh" ACCOUNT "$cur" ;;
+            2) read -r -p "Server mới [$(bot_server "$b")]: " cur
+               [ -n "$cur" ] && set_sh_var "$sh" SERVER "$cur" ;;
+            3) [ -f "$ini" ] || { err "không có INI"; continue; }
+               read -r -p "INI_SRC mới (đường dẫn, Enter=giữ): " cur
+               [ -n "$cur" ] && set_sh_var "$sh" INI_SRC "$cur" ;;
+            4) [ -n "$ini" ] && open_edit "$ini" ;;
+            5) if [ -n "$login" ]; then open_edit "$login"; else warn "chưa có login script"; fi ;;
+            6) [ -f "$tsh" ] || { err "không có $tsh"; continue; }
+               read -r -p "TTYD user [$(ttyd_user_for "$b")]: " cur
+               [ -n "$cur" ] && set_sh_var "$tsh" TTYD_USER "$cur"
+               read -r -p "TTYD pass [***]: " cur
+               [ -n "$cur" ] && set_sh_var "$tsh" TTYD_PASS "$cur" ;;
+            7) [ -f "$tsh" ] || { err "không có $tsh"; continue; }
+               read -r -p "Port web mới (Enter=giữ): " cur
+               if [ -n "$cur" ]; then
+                   [[ "$cur" =~ ^[0-9]+$ ]] && [ "$cur" -ge 1 ] && [ "$cur" -le 65535 ] \
+                       && set_sh_var "$tsh" PORT "$cur" || err "port không hợp lệ"
+               fi
+               read -r -p "Port ttyd mới (Enter=giữ): " cur
+               if [ -n "$cur" ]; then
+                   [[ "$cur" =~ ^[0-9]+$ ]] && [ "$cur" -ge 1 ] && [ "$cur" -le 65535 ] \
+                       && set_sh_var "$tsh" TTYD_PORT "$cur" || err "port không hợp lệ"
+               fi ;;
+            8) rename_bot "$b" && break ;;
+            9) open_edit "$sh" ;;
+            10) [ -f "$tsh" ] && open_edit "$tsh" || err "không có $tsh" ;;
+            0|"") break ;;
+            *) say "chọn 0-10" ;;
+        esac
+    done
+    dim "xong edit $b (nếu đang chạy thì 'bot start -f $b' để nhận thay đổi)"
+}
+cmd_edit() {
+    if [ ! -t 0 ]; then err "'edit' cần terminal tương tác"; return 1; fi
+    reg_load
+    local targets=("$@")
+    if [ ${#targets[@]} = 0 ]; then
+        if [ "${#REG_NAMES[@]}" = 1 ]; then targets=("${REG_NAMES[@]}")
+        else err "dùng: bot edit <bot|all>"; cmd_list; return 1; fi
+    fi
+    local n
+    for n in "${targets[@]}"; do
+        if [ "$n" = all ]; then local m; for m in "${REG_NAMES[@]}"; do edit_one "$m"; done
+        else edit_one "$n"; fi
+    done
+}
+
+cmd_attach() {
+    local n="$1" s
+    if [ -z "$n" ]; then
+        if tmux has-session -t "=$SHARED_SESSION" 2>/dev/null; then
+            exec tmux attach-session -t "$SHARED_SESSION"
+        fi
+        err "dùng: bot attach <bot>"; return 1
+    fi
+    s="$(sess_of "$n")" || { err "'$n' không chạy ('bot start $n' trước)"; return 1; }
+    case "$s" in
+        *:*) tmux select-window -t "$s" 2>/dev/null; tmux attach-session -t "${s%%:*}" ;;
+        *)   tmux attach-session -t "$s" ;;
+    esac
+}
+
+cmd_doctor() {
+    reg_load
+    local bad=0 d f
+    say "${BR}═══ doctor ═══${X}"
+    # deps
+    for c in tmux ss python3 pgrep; do
+        command -v "$c" >/dev/null 2>&1 && ok "$c: có" || { err "$c: THIẾU"; bad=1; }
+    done
+    # registry
+    [ -f "$REG_FILE" ] && ok "registry: $(short_path "$REG_FILE") (${#REG_NAMES[@]} bot)" \
+        || { warn "chưa có registry (sẽ tự tạo khi seed)"; }
+    local n
+    for n in "${REG_NAMES[@]}"; do
+        d="$(reg_dir "$n")"
+        [ -d "$d" ] || { err "$n: thư mục không tồn tại $d"; bad=1; continue; }
+        [ -f "$d/$n.sh" ] || { err "$n: thiếu $d/$n.sh"; bad=1; }
+        f="$(bot_ini "$n" 2>/dev/null)"
+        [ -n "$f" ] || warn "$n: không tìm thấy INI"
+    done
+    # session mồ côi (mc_* không thuộc bot nào)
+    local s orph=""
+    for s in $(tmux ls -F '#{session_name}' 2>/dev/null | grep -E '^mc_'); do
+        [ "$s" = "$SHARED_SESSION" ] && continue
+        reg_has "${s#mc_}" || orph="$orph $s"
+    done
+    [ -n "$orph" ] && warn "tmux mồ côi:$orph (bot stop -a để dọn)" || ok "tmux: không có session mồ côi"
+    # systemd cũ
+    for f in /etc/systemd/system/mc-*.service "$HOME/.config/systemd/user/"mc-*.service; do
+        [ -e "$f" ] || continue
+        s="$(basename "$f" .service)"; s="${s#mc-}"
+        reg_has "$s" || warn "unit systemd cũ: $f (bot không nằm trong registry)"
+    done
+    # hạ tầng
+    if [ -n "$(dl_pid)" ]; then ok "web 1-port :$DL_PORT: chạy (pid $(dl_pid))"
+    else dim "web 1-port :$DL_PORT: tắt"; fi
+    local tpid
+    tpid="$(tunnel_pid)"; [ -z "$tpid" ] && tpid="$(tunnel_pid_any)"
+    if [ -n "$tpid" ]; then ok "tunnel: chạy (pid $tpid) $(tunnel_url)"
+    else dim "tunnel: tắt ('bot tunnel on' để mở)"; fi
+    [ "$bad" = 0 ] && ok "doctor: mọi thứ ổn" || err "doctor: có vấn đề (xem above)"
+}
+
+# ============================================================================
+#  MAIN
+# ============================================================================
+cmd="${1:-}"; [ $# -gt 0 ] && shift
+
+case "$cmd" in
+    ""|help|-h|--help|h|\?|-help)
+        reg_load; registry_seed
+        if [ -z "$cmd" ]; then
+            # không đối số: 1 bot → start, nhiều → list
+            if [ "${#REG_NAMES[@]}" = 1 ]; then
+                say "${D}[hint] không có lệnh → start bot duy nhất${X}"
+                exec "$0" start "${REG_NAMES[0]}"
+            fi
+            cmd_list
+        else
+            cmd_help
+        fi
+        ;;
+    version|--version|-v) echo "bot $BOT_VERSION" ;;
+    list|ls|l)
+        reg_load; registry_seed; cmd_list ;;
+    status|st|stat)
+        reg_load; registry_seed; cmd_status "$@" ;;
+    info)
+        reg_load; registry_seed; cmd_info "$@" ;;
+    start|run)
+        reg_load; registry_seed; cmd_start "$@" ;;
+    stop|kill)
+        reg_load; registry_seed; cmd_stop "$@" ;;
+    restart|rst)
+        reg_load; registry_seed; cmd_restart "$@" ;;
+    tunnel|tn)
+        reg_load; cmd_tunnel "$@" ;;
+    add)
+        reg_load; registry_seed; cmd_add "$@" ;;
+    remove|rm|del|delete)
+        reg_load; registry_seed; cmd_remove "$@" ;;
+    download|dl)
+        reg_load; cmd_download "$@" ;;
+    edit)
+        reg_load; registry_seed; cmd_edit "$@" ;;
+    attach|ta)
+        reg_load; registry_seed; cmd_attach "$@" ;;
+    doctor|check)
+        reg_load; registry_seed; cmd_doctor ;;
+    *)
+        reg_load; registry_seed
+        if reg_has "$cmd"; then
+            say "${D}[hint] 'bot $cmd' = 'bot start $cmd'${X}"
+            exec "$0" start "$cmd" "$@"
+        fi
+        err "lệnh không hiểu: '$cmd'"
+        say ""
+        dim "  xem trợ giúp: bot help   •   danh sách: bot ls"
+        exit 1 ;;
+esac
