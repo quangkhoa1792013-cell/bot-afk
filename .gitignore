@@ -27,3 +27,8 @@ scripts/proxy/nohup.out
 scripts/*.log
 nohup.out
 *.pcap
+
+candy/
+bots/
+systemd/
+./geasf.ini
