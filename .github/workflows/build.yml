@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         arch: [x64, arm64]
@@ -20,10 +20,20 @@ jobs:
 
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: '10.0.402'
 
       - name: Publish linux-${{ matrix.arch }}
-        run: dotnet publish mcc-src/MinecraftClient/MinecraftClient.csproj -c Release --arch ${{ matrix.arch }} -o out
+        run: |
+          set -o pipefail
+          dotnet --list-sdks
+          if dotnet publish mcc-src/MinecraftClient/MinecraftClient.csproj -c Release --arch ${{ matrix.arch }} -o out 2>&1 | tee publish.log; then
+            echo "publish ok"
+          else
+            tail -n 60 publish.log | head -n 40 | while IFS= read -r line; do
+              echo "::error::${{ matrix.arch }}: $line"
+            done
+            exit 1
+          fi
 
       - name: Rename artifact
         run: cp out/MinecraftClient MinecraftClient-linux-${{ matrix.arch }}
