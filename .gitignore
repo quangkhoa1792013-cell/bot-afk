@@ -28,7 +28,18 @@ scripts/*.log
 nohup.out
 *.pcap
 
-candy/
-bots/
-systemd/
-./geasf.ini
+# --- file cá nhân/runtime (chỉ ở máy, không đưa vào repo) ---
+/.download_on
+/MinecraftClient.backup.ini
+/geasf.ini
+/bots.conf
+/bots/geasf.sh
+/bots/geasf_tmux.sh
+/bots/geasf.bat
+/bots/geasf.ps1
+/bots/geasf.backup.ini
+/scripts/
+/systemd/
+/caddy/
+/download-*.log
+*.old
