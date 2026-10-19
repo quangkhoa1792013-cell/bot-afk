@@ -1,7 +1,7 @@
-# --- binary (build bằng GitHub Actions hoặc tải release) ---
-MinecraftClient
-MinecraftClient-*
-MinecraftClient.patched
+# --- binary (build bằng GitHub Actions hoặc tải release) --- root-chỉ, tránh nuốt cả thư mục source ---
+/MinecraftClient
+/MinecraftClient-*
+/MinecraftClient.patched
 *.dll
 *.exe
 
@@ -9,7 +9,7 @@ MinecraftClient.patched
 backups/
 khoaddd/
 logs/
-bin/
+/bin/
 __pycache__/
 **/__pycache__/
 caddy/runtime/
