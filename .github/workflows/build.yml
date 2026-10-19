@@ -1,0 +1,52 @@
+name: build
+
+on:
+  push:
+    branches: [bot-manager, main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [x64, arm64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish linux-${{ matrix.arch }}
+        run: dotnet publish mcc-src/MinecraftClient/MinecraftClient.csproj -c Release --arch ${{ matrix.arch }} -o out
+
+      - name: Rename artifact
+        run: cp out/MinecraftClient MinecraftClient-linux-${{ matrix.arch }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MinecraftClient-linux-${{ matrix.arch }}
+          path: MinecraftClient-linux-${{ matrix.arch }}
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: rel
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" rel/*/MinecraftClient-linux-* \
+            --title "MinecraftClient ${GITHUB_REF_NAME}" \
+            --notes "Build tự động: linux-x64 + linux-arm64 (kèm patch fake client KingMC). Cách dùng: chmod +x MinecraftClient-linux-* rồi đổi tên thành MinecraftClient."

@@ -1,0 +1,25 @@
+[Unit]
+Description=MCC Bot geasf (hardened - Arch Linux)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# geasf_tmux.sh tu giu process song khi chay duoi systemd (khong co TTY),
+# nen de Type=simple + Restart=always; KHONG truyen --bg o day.
+# Neu script thoat ngay, systemd se kill luon tmux + bot (KillMode=control-group).
+Type=simple
+User=khoablabla
+Group=khoablabla
+WorkingDirectory=/home/khoablabla/geasf
+# Hardened: chi bind 127.0.0.1, Caddy lam reverse proxy 80/443
+Environment=BIND_HOST=127.0.0.1
+Environment=PORT=2013
+Environment=TTYD_PORT=2014
+ExecStart=/bin/bash /home/khoablabla/geasf/bots/geasf_tmux.sh
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

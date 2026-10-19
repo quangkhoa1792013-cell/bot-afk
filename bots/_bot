@@ -1,0 +1,73 @@
+#compdef bot
+# _bot — gợi ý tham số/option cho lệnh `bot` (zsh)
+#
+# Cài đặt 1 lần:
+#   mkdir -p ~/.zsh/completions
+#   cp /home/khoablabla/geasf/bots/_bot ~/.zsh/completions/_bot
+#   # thêm vào ~/.zshrc (trước dòng `compinit`):
+#   #   fpath=(~/.zsh/completions $fpath)
+#   exec zsh
+#
+# Gõ `bot <TAB>` -> gợi ý lệnh + tên bot; `bot start <TAB>` -> tên bot; ...
+
+_bot() {
+    local -a cmds flags dl_subs tn_subs bots
+    cmds=(start stop restart list status info add remove download tunnel edit attach doctor help version)
+    flags=(-f --force -y --yes -a --all -A -p --purge)
+    dl_subs=(on off status stop)
+    tn_subs=(on off status)
+
+    # tên bot: từ bots.conf + quét bots/*.sh
+    local root="${BOT_PROJECT_DIR:-$HOME/geasf}" reg f b
+    reg="$root/bots.conf"
+    bots=()
+    if [[ -f "$reg" ]]; then
+        while IFS= read -r line; do
+            line="${line%%#*}"
+            b="${line%%|*}"
+            b="${b//[[:space:]]/}"
+            [[ -z "$b" ]] && continue
+            bots+=("$b")
+        done < "$reg"
+    fi
+    for f in "$root"/bots/*.sh(N) "$root"/*/bots/*.sh(N); do
+        b="${f:t:r}"
+        case "$b" in *_tmux|*_backup|*_old|test_*) continue ;; esac
+        (( ${bots[(I)$b]} )) || bots+=("$b")
+    done
+
+    local context state line
+    typeset -A opt_args
+    _arguments -C \
+        '1: :->cmd' \
+        '*: :->args' && return 0
+
+    case $state in
+        cmd)
+            _describe -t commands 'lenh bot' cmds bots
+            ;;
+        args)
+            case "${line[1]}" in
+                download|dl)
+                    _describe -t dl 'download' dl_subs
+                    ;;
+                tunnel|tn)
+                    _describe -t tn 'tunnel' tn_subs
+                    ;;
+                start|stop|restart|status|info|edit|attach|remove)
+                    _describe -t bots 'bot' bots
+                    _describe -t extra 'khac' '(all)' flags
+                    ;;
+                add)
+                    _files
+                    ;;
+                *)
+                    _describe -t bots 'bot' bots
+                    _describe -t flags 'co' flags
+                    ;;
+            esac
+            ;;
+    esac
+}
+
+_bot "$@"

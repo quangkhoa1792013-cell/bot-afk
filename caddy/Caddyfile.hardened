@@ -1,0 +1,40 @@
+# Caddyfile HARDENED - GUI portal - khoablabla.ddns.net
+khoablabla.ddns.net {
+	tls {
+		protocols tls1.2 tls1.3
+	}
+	@acme path /.well-known/acme-challenge/*
+	handle @acme {
+		reverse_proxy 127.0.0.1:2013
+	}
+	@download path /download /download/*
+	handle @download {
+		reverse_proxy 127.0.0.1:2013 {
+			header_up Host {upstream_hostport}
+			header_up X-Real-IP {remote_host}
+			header_up X-Forwarded-For {remote_host}
+		}
+	}
+	handle {
+		basicauth {
+			khoablabla $2a$14$lYPtKsbqOpTwtFfbeo6a4OzvYlt3lcy7xpojBTMO1wQwljUOJcbRi
+		}
+		@terminal path /terminal/* /ws
+		handle @terminal {
+			uri strip_prefix /terminal
+			reverse_proxy 127.0.0.1:2014
+		}
+		@portal path /
+		handle @portal {
+			reverse_proxy 127.0.0.1:2013
+		}
+		handle {
+			reverse_proxy 127.0.0.1:2013 {
+				header_up Host {upstream_hostport}
+				header_up X-Real-IP {remote_host}
+				header_up X-Forwarded-For {remote_host}
+				header_up X-Forwarded-Proto {scheme}
+			}
+		}
+	}
+}
