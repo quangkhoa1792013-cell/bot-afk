@@ -216,13 +216,12 @@ else
         # Thay tên/action cho bot mới
         sed -i "s/Task_Name = \"auto login geasf\"/Task_Name = \"auto login $BOT_NAME\"/" "$TARGET_DIR/$BOT_INI" 2>/dev/null || true
         sed -i "s|Action = \"script scripts/login_geasf.txt\"|Action = \"script $BOT_SCRIPT\"|" "$TARGET_DIR/$BOT_INI" 2>/dev/null || true
-        sed -i "s/Action = \"script \$BOT_SCRIPT\"/Action = \"script $BOT_SCRIPT\"/" "$TARGET_DIR/$BOT_INI" 2>/dev/null || true
     else
         cat > "$TARGET_DIR/$BOT_INI" <<INI
 [Main.Advanced]
 ExitOnFailure = true
 CacheScript = true
-BrandInfo = "vanilla"
+BrandInfo = "fabric"
 MinecraftVersion = "1.21.11"
 InventoryHandling = true
 EntityHandling = true
@@ -421,7 +420,6 @@ while true; do
     fi
 done
 EOSH2
-chmod +x "$TARGET_DIR/$BOT_SH"
 chmod +x "$TARGET_DIR/$BOT_SH"
 echo "[*] Tạo $BOT_SH"
 
@@ -737,11 +735,11 @@ _bot_list() {
     fi
 }
 _check_exists() {
-    local n="$1"
-    [ -f "$BOT_DIR/$n.sh" ] || [ -f "$BOT_DIR/$n.ini" ] && return 0
-    for alt in "$HOME/geasf/bots" "./bots" "$PROJECT_DIR/bots" "/home/khoablabla/geasf/bots" "/home/khoablabla/test-bo/bots"; do
-        [ "$alt" = "$BOT_DIR" ] && continue
-        [ -f "$alt/$n.sh" ] || [ -f "$alt/$n.ini" ] && return 0
+    local n="\$1"
+    [ -f "$BOT_DIR/\$n.sh" ] || [ -f "$BOT_DIR/\$n.ini" ] && return 0
+    for alt in "\$HOME/geasf/bots" "./bots" "\$PROJECT_DIR/bots" "\$HOME/test-bo/bots"; do
+        [ "\$alt" = "\$BOT_DIR" ] && continue
+        [ -f "\$alt/\$n.sh" ] || [ -f "\$alt/\$n.ini" ] && return 0
     done
     return 1
 }
@@ -877,8 +875,8 @@ case "\$1" in
             printf "%-12s %-6s %-8s %-30s %-12s %-12s %-10s\n" "---" "---" "---" "----" "--------" "----" "-------"
             for b in \$(_bot_list); do
                 bdir=\$(_get_bot_dir "\$b")
-                local session="mc_\$b"
-                local sess_type="rieng"
+                session="mc_\$b"
+                sess_type="rieng"
                 if tmux has-session -t "mc_bot" 2>/dev/null && tmux list-windows -t mc_bot -F "#{window_name}" 2>/dev/null | grep -q "^\$b\$"; then
                     session="mc_bot"
                     sess_type="chung"
@@ -1236,18 +1234,35 @@ EOSH
         fi
         export PATH="$HOME/.local/bin:$PATH"
     fi
-    # Xoa alias cu neu co (tranh xung dot)
+    # GHI DE + dọn sạch các dạng alias/definition `bot` cũ trong rc (kẻo làm che mất CLI mới)
+    echo "[*] Ghi de CLI tai $BOT_BIN (file cu, neu co, se duoc thay the)"
+    clean_rc_bot() {
+        # $1 = rc file. Xoa: 'alias bot=...', dong marker, và function bot(){...} (dem brace, không ăn trọn file)
+        awk '
+            /^[[:space:]]*alias[[:space:]]+/ && ($0!~/bot=/) {print; next}
+            /^[[:space:]]*alias[[:space:]]+/ {next}
+            /BOT MCC alias/ {next}
+            /^[[:space:]]*bot[()]*[[:space:]]*[{]/ {infun=1; depth=0}
+            /^[[:space:]]*function[[:space:]]+bot/ {infun=1; depth=0}
+            infun {
+                n=length($0)
+                for (i=1; i<=n; i++) {
+                    c=substr($0,i,1)
+                    if (c=="{") depth++
+                    else if (c=="}") { depth--; if (depth==0) { infun=0; next } }
+                }
+            }
+            infun { next }
+            { print }
+        ' "$1"
+    }
     for RC in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile"; do
-        if [ -f "$RC" ] && grep -q "# --- BOT MCC alias" "$RC" 2>/dev/null; then
-            # Thay bang wrapper goi bin
-            if ! grep -q 'bot() {.*local/bin/bot' "$RC" 2>/dev/null; then
-                echo "[*] Xoa alias cu trong $RC (da co bin)"
-                # Khong xoa han, chi thong bao - de nguoi dung tu xoa neu muon
-                :
-            fi
-        fi
+        [ -f "$RC" ] || continue
+        # backup truoc khi chinh sua rc
+        cp "$RC" "$HOME/.rc-bot-backup" 2>/dev/null || true
+        clean_rc_bot "$RC" > "$RC.tmp-bot" 2>/dev/null && mv "$RC.tmp-bot" "$RC" || rm -f "$RC.tmp-bot"
     done
-    echo "[*] Da tao lenh bot tai $BOT_BIN"
+    echo "[*] Da tao lenh bot tai $BOT_BIN (alias/function cu trong .bashrc/.zshrc/.profile da duoc xoa, backup: ~/.rc-bot-backup)"
     echo "    Dung: bot help | bot list | bot add | bot remove <ten> | bot <ten>"
     echo "    Mo terminal moi hoac chay: source ~/.bashrc; bot help"
 else

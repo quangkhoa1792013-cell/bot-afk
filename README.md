@@ -34,3 +34,17 @@ Cần .NET SDK 10.0.
 
 - Mật khẩu đăng nhập nằm trong `scripts/login_<tên>.txt` **chỉ tồn tại trên máy cài**, không được commit.
 - Repo không chứa binary — build tự động bằng [`.github/workflows/build.yml`](.github/workflows/build.yml).
+
+## Windows
+
+tmux **không chạy native trên Windows** (tmux cần Unix pty; Git Bash/Cygwin đều không đủ). Hai lối đi:
+
+1. **WSL2 (khuyên dùng)** — `wsl --install`, cài tmux trong WSL rồi chạy `./install.sh` như Linux. Bot chạy y hệt Linux: tmux session sống cả khi đóng cửa sổ, lệnh `bot`, AutoRelog...
+   `install.ps1` sẽ tự dò WSL: nếu có, nó hỏi "chạy mode WSL?" và gọi `install.sh` bên trong giúp bạn.
+2. **Native (không cần WSL)** — chạy `install.bat` hoặc `install.ps1`:
+   - Runner là vòng lặp `bots/<tên>.bat`/`.ps1` tự nối lại sau 70 s (thay cho tmux + AutoRelog), tự nhảy qua giờ bảo trì 04:00–05:20
+   - Tùy chọn Task Scheduler (`schtasks`) để bot chạy ngầm khi khởi động Windows
+   - Lệnh `bot` được ghi đè vào `%USERPROFILE%\.local\bin\bot.bat` (thư mục được thêm vào PATH người dùng nếu thiếu)
+   - Tải `MinecraftClient.exe` bản mới nhất từ release của MCCTeam (tự nhận diện x64/arm64)
+
+(Lựa chọn thú vị nếu muốn "tmux cảm giác thật" mà không dùng WSL: [psmux](https://gist.github.com/psmux/16e2c278b32c25c6a6663b6247ec24c3) — nhưng WSL2 vẫn là con đường mượt nhất cho bộ bot-manager này.)

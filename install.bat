@@ -82,7 +82,7 @@ if exist "MinecraftClient.ini" (
     > "%BOT_INI%" echo [Main.Advanced]
     >>"%BOT_INI%" echo ExitOnFailure = true
     >>"%BOT_INI%" echo CacheScript = true
-    >>"%BOT_INI%" echo BrandInfo = "vanilla"
+    >>"%BOT_INI%" echo BrandInfo = "fabric"
     >>"%BOT_INI%" echo MinecraftVersion = "1.21.11"
     >>"%BOT_INI%" echo InventoryHandling = true
     >>"%BOT_INI%" echo EntityHandling = true
@@ -140,13 +140,10 @@ set "BOT_BAT=bots\%BOT_NAME%.bat"
 >>"%BOT_BAT%" echo cd /d "%%~dp0.."
 >>"%BOT_BAT%" echo set "ACCOUNT=%BOT_NAME%"
 >>"%BOT_BAT%" echo set "SERVER=%BOT_SERVER%"
->>"%BOT_BAT%" echo set "INI=%BOT_INI:\=/%"
->>"%BOT_BAT%" echo set "INI=%%INI:\=\\%%"
+>>"%BOT_BAT%" echo set "INI=%BOT_INI%"
 >>"%BOT_BAT%" echo :loop
->>"%BOT_BAT%" echo for /f "tokens=1,2 delims=:" %%%%a in ("%%time%%") do (set "CUR_H=%%%%a" ^& set "CUR_M=%%%%b")
->>"%BOT_BAT%" echo set /a CUR_H=1%%CUR_H%% - 100 2^>nul
->>"%BOT_BAT%" echo set /a CUR_M=1%%CUR_M%% - 100 2^>nul
->>"%BOT_BAT%" echo set /a CUR_TOTAL=CUR_H*60+CUR_M
+>>"%BOT_BAT%" echo for /f "tokens=1,2 delims=:" %%%%a in ("%%time: =0%%") do (set "CUR_H=%%%%a" ^& set "CUR_M=%%%%b")
+>>"%BOT_BAT%" echo set /a CUR_TOTAL=(1%%CUR_H%%-100)*60+(1%%CUR_M%%-100) 2^>nul
 >>"%BOT_BAT%" echo if %%CUR_TOTAL%% GEQ 240 if %%CUR_TOTAL%% LSS 320 (echo Bao tri 04:00-05:20... ^& timeout /t 30 ^>nul ^& goto loop)
 >>"%BOT_BAT%" echo echo Dang ket noi: MinecraftClient.exe %%INI%% %%ACCOUNT%% - %%SERVER%%
 >>"%BOT_BAT%" echo MinecraftClient.exe "%%INI%%" "%%ACCOUNT%%" - "%%SERVER%%"
@@ -171,9 +168,11 @@ if not exist "MinecraftClient.exe" (
         copy /Y "%~dp0MinecraftClient.exe" "MinecraftClient.exe" >nul
         echo [*] Copy MinecraftClient.exe
     ) else (
-        echo [*] MinecraftClient.exe chua co, dang tai tu GitHub...
-        powershell -Command "Invoke-WebRequest -Uri 'https://github.com/MCCTeam/Minecraft-Console-Client/releases/latest/download/MinecraftClient-20260829-511-win-x64.exe' -OutFile 'MinecraftClient.exe'" 2>nul
-        if exist "MinecraftClient.exe" echo [*] Da tai MinecraftClient.exe
+        echo [*] MinecraftClient.exe chua co, dang tai tu GitHub (tu nhan dien arch + ban moi nhat)...
+        powershell -NoProfile -Command "$arch='win-x64'; if($env:PROCESSOR_ARCHITECTURE -eq 'ARM64'){$arch='win-arm64'}; try { $r=Invoke-RestMethod 'https://api.github.com/repos/MCCTeam/Minecraft-Console-Client/releases/latest' -TimeoutSec 15; $a=$r.assets | Where-Object { $_.name -like ('*'+$arch+'*') } | Select-Object -First 1; if($a){ Invoke-WebRequest -Uri $a.browser_download_url -OutFile 'MinecraftClient.exe' -UseBasicParsing; Write-Host ('[*] Da tai ' + $a.name) } else { Write-Host '[!] Khong thay asset nho' } } catch { Write-Host '[!] Tai that bai - tai tay tu https://github.com/MCCTeam/Minecraft-Console-Client/releases' }"
+        if not exist "MinecraftClient.exe" (
+            echo [!] Can tai tay tu releases (link tren) roi dat MinecraftClient.exe tai %CD%
+        )
     )
 )
 
@@ -187,23 +186,26 @@ echo Ban muon go 'bot' de chay khong? (Go bot hoac bot ^<ten^>)
 set /p NEED_ALIAS="Them alias bot? (y/n) [y]: "
 if "%NEED_ALIAS%"=="" set "NEED_ALIAS=y"
 if /I "%NEED_ALIAS%"=="y" (
-    echo @echo off > "%USERPROFILE%\bot.bat"
-    echo set "BOT_DIR=%CD%\bots" >> "%USERPROFILE%\bot.bat"
-    echo if "%%~1"=="" ( >> "%USERPROFILE%\bot.bat"
-    echo     if exist "%%BOT_DIR%%\%BOT_NAME%.bat" ( >> "%USERPROFILE%\bot.bat"
-    echo         call "%%BOT_DIR%%\%BOT_NAME%.bat" >> "%USERPROFILE%\bot.bat"
-    echo     ) else ( >> "%USERPROFILE%\bot.bat"
-    echo         echo Khong co bot ^& dir /b "%%BOT_DIR%%" >> "%USERPROFILE%\bot.bat"
-    echo     ) >> "%USERPROFILE%\bot.bat"
-    echo ) else ( >> "%USERPROFILE%\bot.bat"
-    echo     if exist "%%BOT_DIR%%\%%~1.bat" ( >> "%USERPROFILE%\bot.bat"
-    echo         call "%%BOT_DIR%%\%%~1.bat" >> "%USERPROFILE%\bot.bat"
-    echo     ) else ( >> "%USERPROFILE%\bot.bat"
-    echo         echo Khong thay bot %%~1 ^& dir /b "%%BOT_DIR%%\*.bat" >> "%USERPROFILE%\bot.bat"
-    echo     ) >> "%USERPROFILE%\bot.bat"
-    echo ) >> "%USERPROFILE%\bot.bat"
-    echo [*] Da tao %%USERPROFILE%%\bot.bat - them %%USERPROFILE%% vao PATH neu chua co
-    echo     Dung: bot  hoac  bot %BOT_NAME%
+    REM Dung %USERPROFILE%\.local\bin\bot.bat (chu voi du kien .local/bin o Linux)
+    set "BOTBIN=%USERPROFILE%\.local\bin\bot.bat"
+    REM GHI DE (xoa file cu neu da co) 
+    if exist "%USERPROFILE%\bot.bat" (
+        del /f /q "%USERPROFILE%\bot.bat"
+        echo [*] Da xoa alias cu: %USERPROFILE%\bot.bat
+    )
+    if not exist "%USERPROFILE%\.local\bin" mkdir "%USERPROFILE%\.local\bin"
+    > "!BOTBIN!" echo @echo off
+    >>"!BOTBIN!" echo set "BOT_DIR=%CD%\bots"
+    >>"!BOTBIN!" echo if "%%~1"=="" (
+    >>"!BOTBIN!" echo     for %%%%f in ("%%BOT_DIR%%\*.bat") do echo %%%%~nf
+    >>"!BOTBIN!" echo     echo Dung: bot ^<ten^>  (vd: bot %BOT_NAME%^)
+    >>"!BOTBIN!" echo ) else (
+    >>"!BOTBIN!" echo     if exist "%%BOT_DIR%%\%%~1.bat" ( call "%%BOT_DIR%%\%%~1.bat" ) else ( echo Khong thay bot %%~1 ^& dir /b "%%BOT_DIR%%\*.bat" )
+    >>"!BOTBIN!" echo )
+    REM Them %USERPROFILE%\.local\bin vao PATH cua User (khong do dong toi PATH System)
+    powershell -NoProfile -Command "$lb=$env:USERPROFILE+'\.local\bin'; $up=[Environment]::GetEnvironmentVariable('Path','User'); if($null -eq $up){$up=''}; if($up -notlike '*\.local\bin*'){ $np=$up; if($np -ne '' -and -not $np.EndsWith(';')){ $np=$np+';' }; [Environment]::SetEnvironmentVariable('Path', $np+$lb, 'User'); Write-Host '[*] Da them .local\bin vao PATH (mo terminal moi de bat dau)' }"
+    echo [*] Da ghi de %USERPROFILE%\.local\bin\bot.bat
+    echo     Dung: bot  hoac  bot %BOT_NAME%   (mo terminal moi neu PATH vua duoc them)
 )
 
 REM --- 4. Task Scheduler ---
@@ -213,7 +215,7 @@ set /p NEED_TASK="Tao Task chay ngam khi khoi dong? (y/n) [y]: "
 if "%NEED_TASK%"=="" set "NEED_TASK=y"
 if /I "%NEED_TASK%"=="y" (
     schtasks /create /tn "MC_Bot_%BOT_NAME%" /tr "\"%CD%\bots\%BOT_NAME%.bat\"" /sc onlogon /rl highest /f 2>nul
-    if %errorlevel%==0 (
+    if !errorlevel!==0 (
         echo [*] Da tao Task MC_Bot_%BOT_NAME% - chay khi dang nhap
         echo     Xem: schtasks /query /tn MC_Bot_%BOT_NAME%
         echo     Chay ngay: schtasks /run /tn MC_Bot_%BOT_NAME%
