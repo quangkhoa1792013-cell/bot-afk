@@ -914,8 +914,8 @@ case "\$1" in
         ;;
     add)
         echo "=== Them bot ==="
-        echo "  1) Cai dat moi hoan chinh (chay install.sh: hoi ten/acc/server/script...)"
-        echo "  2) Bot co san - chi ghi path (file <ten>.sh hoac thu muc chua no), sau do chay bth"
+        echo "  1) Cai moi hoan chinh - chay install.sh (hoi ten/acc/server/script...)"
+        echo "  2) Bot co san - chi GHI PATH vao bots.conf (phien ban bot day du se doc file nay)"
         read -p "Chon 1/2 (Enter=1): " ADDMODE
         if [ -z "\$ADDMODE" ] && [ ! -t 0 ]; then
             echo "Dung: bot add <file.sh|thu_muc> (bot add khong doi so can terminal tuong tac)"
@@ -927,15 +927,17 @@ case "\$1" in
         fi
         if [ -z "\$2" ]; then read -r -p "Path toi bot: " ADDSRC; else ADDSRC="\$2"; fi
         ADDSRC="\${ADDSRC/#\\~/$HOME}"
-        # .txt = file script login -> tao bot moi qua installer --script
+        # .txt = file script login -> tao bot moi qua installer --script (cai dat, khong phai ghi path)
         case "\$ADDSRC" in
             *.txt)
                 [ -f "\$ADDSRC" ] || { echo "[!] Khong thay file '\$ADDSRC'"; exit 1; }
+                echo "[*] Tao bot moi tu script login (chay install.sh --script)..."
                 bash "\$PROJECT_DIR/install.sh" --script "\$ADDSRC"
                 exit \$?
                 ;;
         esac
         ADDSRC="\$(readlink -f "\$ADDSRC" 2>/dev/null || printf '%s' "\$ADDSRC")"
+        # thu muc -> dung 1 file <ten>.sh (bo _tmux/backup/test)
         if [ -d "\$ADDSRC" ]; then
             cnt=0
             for f in "\$ADDSRC"/*.sh; do
@@ -951,36 +953,16 @@ case "\$1" in
         ADDDIR="\$(dirname "\$ADDFILE")"
         ADDNAME="\$(basename "\$ADDFILE" .sh)"
         case "\$ADDNAME" in *_tmux|*_backup|*_old|test_*) echo "[!] Ten khong hop le: \$ADDNAME"; exit 1;; esac
-        # import file cua bot (khong ghi de file da co, backup la .imported.bak)
-        echo "[*] Import bot '\$ADDNAME' tu \$ADDIR -> \$PROJECT_DIR"
-        for f in "\$ADDIR/\$ADDNAME.sh" "\$ADDIR/\${ADDNAME}_tmux.sh" "\$ADDIR/\$ADDNAME.ini"; do
-            [ -f "\$f" ] || continue
-            dest="\$PROJECT_DIR/bots/\$(basename "\$f")"
-            if [ -e "\$dest" ]; then
-                cp -f "\$dest" "\$dest.imported.bak" 2>/dev/null
-                cp -f "\$f" "\$dest"
-            else
-                cp -f "\$f" "\$dest"
-            fi
-            chmod +x "\$dest" 2>/dev/null || true
-            echo "    \$(basename "\$f")"
-        done
-        for src_login in "\$ADDIR/scripts/login_\$ADDNAME.txt" "\$ADDIR/../scripts/login_\$ADDNAME.txt" "\$ADDIR/login_\$ADDNAME.txt"; do
-            [ -f "\$src_login" ] || continue
-            mkdir -p "\$PROJECT_DIR/scripts"
-            if [ -e "\$PROJECT_DIR/scripts/login_\$ADDNAME.txt" ]; then
-                cp -f "\$PROJECT_DIR/scripts/login_\$ADDNAME.txt" "\$PROJECT_DIR/scripts/login_\$ADDNAME.txt.imported.bak"
-            fi
-            cp -f "\$src_login" "\$PROJECT_DIR/scripts/login_\$ADDNAME.txt"
-            echo "    scripts/login_\$ADDNAME.txt"
-            break
-        done
-        # Sua path tuyet doi cua project cu trong file da import (neu co)
-        if [ -f "\$PROJECT_DIR/bots/\${ADDNAME}_tmux.sh" ]; then
-            sed -i "s|^PROJECT_DIR=.*|PROJECT_DIR=\"\$PROJECT_DIR\"|" "\$PROJECT_DIR/bots/\${ADDNAME}_tmux.sh" 2>/dev/null || true
-        fi
-        echo "[*] Xong. Chay: bot \$ADDNAME   •   xem list: bot list"
+        # GHI REGISTRY THUAN (khong copy/khong sua file nao - phan cai dat thuoc install.sh)
+        REG="\$PROJECT_DIR/bots.conf"
+        [ -f "\$REG" ] || printf '# bots.conf - registry cua lenh bot (moi dong: ten|thu_muc_chua_<ten>.sh)\n' > "\$REG"
+        { grep -v "^\$ADDNAME|" "\$REG" 2>/dev/null; printf '%s|%s\n' "\$ADDNAME" "\$ADDDIR"; } > "\$REG.tmp" && mv "\$REG.tmp" "\$REG"
+        echo "[OK] Da ghi registry: \$ADDNAME -> \$ADDDIR (khong dong vao file cua bot)"
+        echo "    Lenh 'bot' hien tai (CLI don gian) chua doc bots.conf - de day du:"
+        echo "      bash \$PROJECT_DIR/install.sh    # chay 1 lan, se thay CLI day du (co bin/bot trong thu muc repo)"
+        echo "    Neu thu muc repo co bin/bot thi CLI da day du: bot \$ADDNAME de chay ngay"
         ;;
+
     remove|rm|delete|del)
         target="\$2"
         if [ -z "\$target" ]; then echo "Dung: bot remove <ten|all>"; _bot_list | sed 's/^/  - /'; exit 1; fi
