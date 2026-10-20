@@ -285,8 +285,10 @@ ${BR}COMMANDS${X}
                               all cũng cách nhau 3s như 'start'
     ${C}list, ls${X}                Danh sách bot trong registry
     ${C}status${X} [bot|all]       Bảng trạng thái (run/pid/session/ttyd)
-    ${C}add${X}    <file.sh|dir>    Thêm bot vào danh sách (registry)
-                              (dir = thư mục chứa đúng 1 file <tên>.sh)
+    ${C}add${X}    [file.sh|dir]    Thêm bot: ${D}không path = hỏi kiểu (1 cài mới / 2 ghi path)${X}
+                              file.sh/.dir = ghi path bot có sẵn
+                              (dir = thư mục chứa đúng 1 file <tên>.sh;
+                               .txt = tạo bot mới từ script login)
     ${C}remove,rm${X} <bot|all> [--purge]
                               Xóa khỏi danh sách (--purge: xóa luôn file +
                               session + unit systemd; mặc định chỉ gỡ khỏi list)
@@ -332,8 +334,9 @@ ${BR}EXAMPLES${X}
     bot stop -a             # tắt sạch: mọi bot + web download + ttyd
     bot restart geasf       # khởi động lại 1 bot
     bot restart all         # khởi động lại tất cả (cách nhau 3s)
-    bot add ./bots/botmoi.sh
-    bot add /path/thu_muc   # thư mục chứa đúng 1 file <tên>.sh
+    bot add                 # hỏi kiểu: 1 cài mới / 2 ghi path bot có sẵn
+    bot add /path/thu_muc   # ghi path nhanh (thư mục chứa đúng 1 file <tên>.sh)
+    bot add ./login.txt     # tạo bot mới từ file script login (.txt)
     bot status all
     bot download on
     bot tunnel on           # mở tunnel internet → :$DL_PORT, in URL
@@ -644,15 +647,45 @@ cmd_restart() {
     return $rc
 }
 
-cmd_add() {
+cmd_add() { # bot add [path] — không path: hỏi kiểu (1=cài mới, 2=ghi path bot có sẵn)
     reg_load
     local p="$1"
     if [ -z "$p" ]; then
-        err "dùng: bot add <file.sh|thư_mục>"
-        dim "  file.sh  → bot tên = tên file; thư mục = nơi chứa nó"
-        dim "  thư_mục  → thư mục chứa đúng 1 file <tên>.sh (không tính *_tmux.sh)"
-        return 1
+        say ""
+        say "${B}Thêm bot kiểu gì?${X}"
+        say "  ${C}1${X}) Cài đặt mới hoàn chỉnh — chạy ${BR}install.sh${X}${D} (hỏi tên/acc/server/script, tạo file...)${X}"
+        say "  ${C}2${X}) Bot có sẵn rồi — chỉ ${B}ghi path${X}${D} vào danh sách, sau đó ${B}bot <tên>${X}${D} là chạy bth${X}"
+        local ans
+        read -r -p "Chọn 1/2 (Enter = 1): " ans || ans=""
+        if [ -z "$ans" ] && [ ! -t 0 ]; then # pipe EOF → không tự chạy installer
+            err "dùng: bot add <file.sh|thư_mục>"
+            dim "  file.sh → ghi path bot có sẵn • .txt → tạo bot mới từ script login"
+            return 1
+        fi
+        if [ "$ans" = "2" ]; then
+            read -r -p "Path tới bot (file ${BR}<tên>.sh${X} hoặc thư mục chứa nó): " p || p=""
+            [ -z "$p" ] && { err "chưa nhập path"; return 1; }
+        else
+            if [ "$ans" = "1" ] && { [ ! -t 0 ] || [ ! -e /dev/tty ]; }; then
+                err "không có tty để chạy installer tương tác"
+                dim "  dùng: bot add <file.sh|thư_mục> (ghi path nhanh)"
+                return 1
+            fi
+            say "${D}[*] chạy installer... (Ctrl+C hủy bất cứ lúc nào)${X}"
+            bash "$PROJECT_DIR/install.sh"
+            return $?
+        fi
     fi
+    # truyền .txt (file script login) → tạo bot mới qua installer --script
+    case "$p" in
+        *.txt)
+            [ -f "${p/#\~/$HOME}" ] || { err "không thấy file '$p'"; return 1; }
+            say "${D}[*] tạo bot mới từ script login: $p${X}"
+            bash "$PROJECT_DIR/install.sh" --script "$p"
+            return $?
+            ;;
+    esac
+    p="${p/#\~/$HOME}"
     # thư mục → tìm đúng 1 file .sh ứng viên
     if [ -d "$p" ]; then
         local c=() f

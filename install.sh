@@ -705,6 +705,13 @@ if [[ "$NEED_ALIAS" =~ ^[Yy]$ ]]; then
     echo "[*] Tim thay $BOTS_COUNT bot(s) trong bots/ (bo _tmux, test_)"
     mkdir -p "$HOME/.local/bin" 2>/dev/null
     BOT_BIN="$HOME/.local/bin/bot"
+    CLI_SRC="$(dirname "$0")/bin/bot"
+    if [ -f "$CLI_SRC" ]; then
+        # Ưu tiên CLI dài 'bin/bot' trong repo (bản v2, có registry + attach...) — GHI ĐÈ
+        cp -f "$CLI_SRC" "$BOT_BIN" && chmod +x "$BOT_BIN"
+        echo "[*] Ghi de CLI tai $BOT_BIN ($CLI_SRC, ban day du)"
+    else
+        # Khong co bin/bot thi sinh CLI don gian
 cat > "$BOT_BIN" <<EOSH
 #!/bin/bash
 # BOT CLI - sinh boi install.sh - ho tro info/status/list/help/add/remove/kill/start/download
@@ -793,7 +800,7 @@ Lenh:
   list, ls                  Liet ke bot va duong dan
   info [bot|all]            Thong tin bot (neu khong doi so: all)
   status [bot|all]          Trang thai bot (running/pid/download/ttyd) - bang dep
-  add [path]                Them bot moi (path la file script login, neu co)
+  add [path]                Them bot moi; khong path = hoi kieu (1 cai moi / 2 ghi path co san)
   remove <bot|all>, rm      Xoa bot
   kill <bot|all>            Kill tmux session bot
   start <bot|all>           Chay bot
@@ -906,14 +913,73 @@ case "\$1" in
         fi
         ;;
     add)
-        if [ -n "\$2" ] && [ -f "\$2" ]; then
-            echo "[*] Them bot tu file script: \$2"
-            # Goi install.sh voi path script
-            bash "\$PROJECT_DIR/install.sh" --script "\$2"
-        else
-            if [ -n "\$2" ]; then echo "[!] Khong thay file '\$2', chay install thuong"; fi
-            bash "\$PROJECT_DIR/install.sh"
+        echo "=== Them bot ==="
+        echo "  1) Cai dat moi hoan chinh (chay install.sh: hoi ten/acc/server/script...)"
+        echo "  2) Bot co san - chi ghi path (file <ten>.sh hoac thu muc chua no), sau do chay bth"
+        read -p "Chon 1/2 (Enter=1): " ADDMODE
+        if [ -z "\$ADDMODE" ] && [ ! -t 0 ]; then
+            echo "Dung: bot add <file.sh|thu_muc> (bot add khong doi so can terminal tuong tac)"
+            exit 1
         fi
+        if [ "\$ADDMODE" != "2" ]; then
+            bash "\$PROJECT_DIR/install.sh"
+            exit \$?
+        fi
+        if [ -z "\$2" ]; then read -r -p "Path toi bot: " ADDSRC; else ADDSRC="\$2"; fi
+        ADDSRC="\${ADDSRC/#\\~/$HOME}"
+        # .txt = file script login -> tao bot moi qua installer --script
+        case "\$ADDSRC" in
+            *.txt)
+                [ -f "\$ADDSRC" ] || { echo "[!] Khong thay file '\$ADDSRC'"; exit 1; }
+                bash "\$PROJECT_DIR/install.sh" --script "\$ADDSRC"
+                exit \$?
+                ;;
+        esac
+        ADDSRC="\$(readlink -f "\$ADDSRC" 2>/dev/null || printf '%s' "\$ADDSRC")"
+        if [ -d "\$ADDSRC" ]; then
+            cnt=0
+            for f in "\$ADDSRC"/*.sh; do
+                [ -e "\$f" ] || continue
+                case "\$(basename "\$f" .sh)" in *_tmux|*_backup|*_old|test_*) continue;; esac
+                ADDFILE="\$f"; cnt=\$((cnt+1))
+            done
+            [ "\$cnt" -eq 1 ] || { echo "[!] '\$ADDSRC' phai chua dung 1 file <ten>.sh (thay \$cnt)"; exit 1; }
+        else
+            ADDFILE="\$ADDSRC"
+        fi
+        if [ ! -f "\$ADDFILE" ]; then echo "[!] Khong thay file '\$ADDFILE'"; exit 1; fi
+        ADDDIR="\$(dirname "\$ADDFILE")"
+        ADDNAME="\$(basename "\$ADDFILE" .sh)"
+        case "\$ADDNAME" in *_tmux|*_backup|*_old|test_*) echo "[!] Ten khong hop le: \$ADDNAME"; exit 1;; esac
+        # import file cua bot (khong ghi de file da co, backup la .imported.bak)
+        echo "[*] Import bot '\$ADDNAME' tu \$ADDIR -> \$PROJECT_DIR"
+        for f in "\$ADDIR/\$ADDNAME.sh" "\$ADDIR/\${ADDNAME}_tmux.sh" "\$ADDIR/\$ADDNAME.ini"; do
+            [ -f "\$f" ] || continue
+            dest="\$PROJECT_DIR/bots/\$(basename "\$f")"
+            if [ -e "\$dest" ]; then
+                cp -f "\$dest" "\$dest.imported.bak" 2>/dev/null
+                cp -f "\$f" "\$dest"
+            else
+                cp -f "\$f" "\$dest"
+            fi
+            chmod +x "\$dest" 2>/dev/null || true
+            echo "    \$(basename "\$f")"
+        done
+        for src_login in "\$ADDIR/scripts/login_\$ADDNAME.txt" "\$ADDIR/../scripts/login_\$ADDNAME.txt" "\$ADDIR/login_\$ADDNAME.txt"; do
+            [ -f "\$src_login" ] || continue
+            mkdir -p "\$PROJECT_DIR/scripts"
+            if [ -e "\$PROJECT_DIR/scripts/login_\$ADDNAME.txt" ]; then
+                cp -f "\$PROJECT_DIR/scripts/login_\$ADDNAME.txt" "\$PROJECT_DIR/scripts/login_\$ADDNAME.txt.imported.bak"
+            fi
+            cp -f "\$src_login" "\$PROJECT_DIR/scripts/login_\$ADDNAME.txt"
+            echo "    scripts/login_\$ADDNAME.txt"
+            break
+        done
+        # Sua path tuyet doi cua project cu trong file da import (neu co)
+        if [ -f "\$PROJECT_DIR/bots/\${ADDNAME}_tmux.sh" ]; then
+            sed -i "s|^PROJECT_DIR=.*|PROJECT_DIR=\"\$PROJECT_DIR\"|" "\$PROJECT_DIR/bots/\${ADDNAME}_tmux.sh" 2>/dev/null || true
+        fi
+        echo "[*] Xong. Chay: bot \$ADDNAME   •   xem list: bot list"
         ;;
     remove|rm|delete|del)
         target="\$2"
@@ -1222,6 +1288,8 @@ case "\$1" in
         ;;
 esac
 EOSH
+        chmod +x "$BOT_BIN"
+    fi
     # Dam bao ~/.local/bin trong PATH
     if ! echo "$PATH" | grep -q "$HOME/.local/bin"; then
         SHELL_RC=""
