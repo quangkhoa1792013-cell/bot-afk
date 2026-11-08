@@ -140,17 +140,20 @@ Action = "script __SCRIPT__"
 $configText = [IO.File]::ReadAllText((Join-Path $targetDir $botIni))
 $configText = $configText -replace 'ExitOnFailure\s*=\s*false', 'ExitOnFailure = true'
 $configText = $configText -replace 'TerrainAndMovements\s*=\s*false', 'TerrainAndMovements = true'
+$configText = $configText -replace 'EnableSentry\s*=\s*true', 'EnableSentry = false'
 $noConfirm = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('a2jDtG5nIHjDoWMgbmjhuq1uIMSRxrDhu6NjIGNsaWVudA=='))
 $temporaryBlock = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('dOG6oW0gdGjhu51pIGLhu4sgY2jhurduIGLhu59pIGjhu4cgdGjhu5FuZyBjaOG7kW5nIGJvdA=='))
+$maintenance = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('YuG6o28gdHLDrA=='))
+$restart = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('TcOBWSBDSOG7piBLSOG7nkkgxJDhu5hORyBM4bqgSQ=='))
 $relogConfig = @'
 [ChatBot.AutoRelog]
 Enabled = true
 Delay = { min = 90.0, max = 150.0 }
 Retries = -1
 Ignore_Kick_Message = false
-Kick_Messages = ["Connection has been lost", "Server is restarting", "Server is full", "bao tri", "__NO_CONFIRM__", "__TEMP_BLOCK__"]
+Kick_Messages = ["Connection has been lost", "Server is restarting", "Server is full", "bao tri", "__MAINTENANCE__", "__RESTART__", "__NO_CONFIRM__", "__TEMP_BLOCK__"]
 
-'@.Replace('__NO_CONFIRM__', $noConfirm).Replace('__TEMP_BLOCK__', $temporaryBlock)
+'@.Replace('__NO_CONFIRM__', $noConfirm).Replace('__TEMP_BLOCK__', $temporaryBlock).Replace('__MAINTENANCE__', $maintenance).Replace('__RESTART__', $restart)
 $configText = [regex]::Replace($configText, '(?ms)^\[ChatBot\.AutoRelog\].*?(?=^\[ChatBot\.|\z)', $relogConfig)
 $configText = [regex]::Replace($configText, '(?ms)^\[ChatBot\.ScriptScheduler\].*?(?=^\[ChatBot\.(?!ScriptScheduler)|\z)', @'
 [ChatBot.ScriptScheduler]

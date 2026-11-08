@@ -32,4 +32,6 @@ if ($text -notmatch '(?ms)\[ChatBot\.ScriptScheduler\]\s*Enabled\s*=\s*true') { 
 if ($text -notmatch 'Action\s*=\s*"script scripts/login_DemoBot\.txt"') { throw 'Login script path is incorrect' }
 if ($text -notmatch '(?ms)\[ChatBot\.AutoRelog\]\s*Enabled\s*=\s*true') { throw 'AutoRelog was not enabled' }
 if ($text -notmatch 'không xác nhận được client') { throw 'UTF-8 reconnect message was not preserved' }
+if ($text -notmatch 'bảo trì') { throw 'UTF-8 maintenance message was not preserved' }
+if ($text -notmatch 'EnableSentry\s*=\s*false') { throw 'Privacy default was not applied' }
 Write-Host 'Windows installer smoke test passed'
