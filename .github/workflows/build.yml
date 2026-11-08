@@ -1,0 +1,93 @@
+name: build
+
+on:
+  push:
+    branches: [bot-manager, main, windows-release]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04, rid: linux-x64, executable: MinecraftClient }
+          - { os: ubuntu-24.04, rid: linux-arm64, executable: MinecraftClient }
+          - { os: windows-latest, rid: win-x64, executable: MinecraftClient.exe }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Test
+        run: dotnet test mcc-src/MinecraftClient.Tests/MinecraftClient.Tests.csproj -c Release -p:UsedAvaloniaProducts= -p:UseSharedCompilation=false
+
+      - name: Publish
+        run: dotnet publish mcc-src/MinecraftClient/MinecraftClient.csproj -c Release -r ${{ matrix.rid }} --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:UsedAvaloniaProducts= -p:UseSharedCompilation=false -o out
+
+      - name: Check Windows executable starts
+        if: matrix.rid == 'win-x64'
+        shell: pwsh
+        run: |
+          $process = Start-Process -FilePath (Join-Path $PWD 'out/MinecraftClient.exe') -ArgumentList '--help', 'BasicIO' -Wait -PassThru -NoNewWindow
+          if ($process.ExitCode -ne 0) { throw "MinecraftClient --help failed: $($process.ExitCode)" }
+
+      - name: Check Windows installer syntax and build package
+        if: matrix.rid == 'win-x64'
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PWD 'install.ps1'), [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) { $errors | ForEach-Object { Write-Error $_ }; throw 'Windows installer syntax error' }
+          & ./windows/test_installer.ps1
+          New-Item -ItemType Directory -Path windows-package | Out-Null
+          Copy-Item out/MinecraftClient.exe, MinecraftClient.ini, install.ps1, install.bat, LICENSE, README.md windows-package/
+          Compress-Archive -Path windows-package/* -DestinationPath out/bot-afk-windows-x64.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MinecraftClient-${{ matrix.rid }}
+          path: out/${{ matrix.executable }}
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        if: matrix.rid == 'win-x64'
+        with:
+          name: bot-afk-windows-x64
+          path: out/bot-afk-windows-x64.zip
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir release
+          cp artifacts/MinecraftClient-linux-x64/MinecraftClient release/MinecraftClient-linux-x64
+          cp artifacts/MinecraftClient-linux-arm64/MinecraftClient release/MinecraftClient-linux-arm64
+          cp artifacts/MinecraftClient-win-x64/MinecraftClient.exe release/MinecraftClient-win-x64.exe
+          cp artifacts/bot-afk-windows-x64/bot-afk-windows-x64.zip release/bot-afk-windows-x64.zip
+          sha256sum release/* > release/SHA256SUMS.txt
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" release/* --title "MinecraftClient $GITHUB_REF_NAME" --generate-notes
