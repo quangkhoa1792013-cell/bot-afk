@@ -1,0 +1,42 @@
+name: Publish v1.0.0 from verified build
+
+on:
+  push:
+    branches: [windows-release]
+    paths: [.github/workflows/publish-v1.yml]
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify tag and completed build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          expected=ed6ecce79f67a55b45f17de5a8ea5bf61e65cfb0
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v1.0.0" --jq '.object.sha')" = "$expected"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/42455205957" --jq '.head_sha')" = "$expected"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/42455205957" --jq '.status')" = completed
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/42455205957/jobs" --jq '[.jobs[] | select(.name | startswith("build (")) | select(.conclusion == "success")] | length')" = 3
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          run-id: 42455205957
+          github-token: ${{ github.token }}
+      - name: Publish verified artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          mkdir release
+          cp artifacts/MinecraftClient-linux-x64/MinecraftClient release/MinecraftClient-linux-x64
+          cp artifacts/MinecraftClient-linux-arm64/MinecraftClient release/MinecraftClient-linux-arm64
+          cp artifacts/MinecraftClient-win-x64/MinecraftClient.exe release/MinecraftClient-win-x64.exe
+          cp artifacts/bot-afk-windows-x64/bot-afk-windows-x64.zip release/bot-afk-windows-x64.zip
+          sha256sum release/* > release/SHA256SUMS.txt
+          gh release create v1.0.0 release/* --repo "$GITHUB_REPOSITORY" --title 'MinecraftClient v1.0.0' --generate-notes
