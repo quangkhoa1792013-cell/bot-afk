@@ -12,14 +12,14 @@
 
 _bot() {
     local -a cmds flags dl_subs tn_subs bots
-    cmds=(start stop restart list status info add remove download tunnel edit attach doctor help version)
+    cmds=(start stop restart autostart list status info add remove download tunnel edit attach doctor help version)
     flags=(-f --force -y --yes -a --all -A -p --purge)
     dl_subs=(on off status stop)
     tn_subs=(on off status)
 
     # tên bot: từ bots.conf + quét bots/*.sh
     local root="${BOT_PROJECT_DIR:-$HOME/geasf}" reg f b
-    reg="$root/bots.conf"
+    reg="${BOT_REG_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/bot-afk/bots.conf}"
     bots=()
     if [[ -f "$reg" ]]; then
         while IFS= read -r line; do
@@ -54,7 +54,7 @@ _bot() {
                 tunnel|tn)
                     _describe -t tn 'tunnel' tn_subs
                     ;;
-                start|stop|restart|status|info|edit|attach|remove)
+                start|stop|restart|autostart|status|info|edit|attach|remove)
                     _describe -t bots 'bot' bots
                     _describe -t extra 'khac' '(all)' flags
                     ;;

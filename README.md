@@ -1,50 +1,65 @@
-# bot-afk (bot-manager)
+# Bot AFK cho KingMC
 
-Bot manager Minecraft dựa trên **fork của Minecraft-Console-Client (MCCTeam)**, đã patch để qua được lớp chống bot Velocity (KingShield) kiểu KingMC: brand từ client thật gửi trước ClientInformation, đăng ký đúng danh sách kênh mod, `PlayerLoaded` gửi đúng lúc nạp world, im lặng trong pha configuration.
+Bộ công cụ này được làm riêng để chạy và quản lý bot AFK trên server Minecraft Java KingMC. Bot hoạt động qua cửa sổ dòng lệnh, không cần mở giao diện trò chơi. Trên Linux có lệnh quản lý nhiều bot và ghi log; trên Windows có bộ cài và trình chạy riêng.
 
-Giấy phép gốc của MCC được giữ nguyên theo **CDDL 1.0** — xem [LICENSE](LICENSE).
+Dự án được sao chép và chỉnh sửa từ [Minecraft Console Client (MCC)](https://github.com/MCCTeam/Minecraft-Console-Client) của **MCCTeam và những người đóng góp**. Đây là phiên bản được phát triển riêng cho mục đích AFK trên KingMC, không phải sản phẩm chính thức của MCCTeam hay KingMC. Mã nguồn MCC được phân phối theo giấy phép [CDDL 1.0](LICENSE).
 
-## Cài đặt
+## Tải về
+
+Tải bản phù hợp tại [Releases](https://github.com/quangkhoa1792013-cell/bot-afk/releases). Bản Windows x64 có tên `bot-afk-windows-x64.zip`. Giải nén vào một thư mục riêng trước khi cài đặt.
+
+Cấu hình và bộ cài được mô tả dưới đây thuộc mã nguồn hiện tại. Các bản phát hành cũ có thể dùng tên `MinecraftClient.ini` cho cấu hình mẫu.
+
+## Cài và chạy trên Windows
+
+1. Giải nén gói Windows và mở `install.bat`.
+2. Chọn thư mục cài, nhập tên nhân vật, địa chỉ server và đường dẫn script đăng nhập nếu đã có.
+3. Mở `bots/<tên>.bat` để chạy bot. Nhấn `Ctrl+C` hoặc đóng cửa sổ để dừng.
+
+Bộ cài có thể tạo tác vụ trong Task Scheduler để chạy bot khi đăng nhập Windows. Có thể quản lý hoặc tắt tác vụ bằng Task Scheduler. Windows hiện chưa có đầy đủ lệnh quản lý và ghi log như Linux.
+
+## Cài và chạy trên Linux
+
+Chạy bộ cài:
 
 ```bash
-git clone https://github.com/quangkhoa1792013-cell/bot-afk.git
-cd bot-afk
-./install.sh            # hỏi thư mục + tên bot, tạo bot, alias `bot`, tùy chọn systemd/ttyd/download
-bot <tên>               # chạy bot (mở tmux)
-bot help                # list/status/add/remove/kill/download...
+chmod +x install.sh
+./install.sh
 ```
 
-Cần binary `MinecraftClient` trong thư mục cài — lấy ở tab **Releases** (GitHub Actions tự build `linux-x64` + `linux-arm64`) hoặc tự build:
+Nếu gói cài có sẵn `MinecraftClient`, bộ cài hoạt động offline. Nếu chưa có binary, bộ cài cho phép tải bản phát hành hoặc tự build khi máy có .NET SDK. Enter ở bước chọn thư mục sẽ dùng `$HOME/<tên trong game>`; đường dẫn tự nhập được dùng nguyên trạng.
+
+`config.ini` được sao chép thành `bots/<tên bot>.ini`. Tên gọi nhớ có thể để trống để dùng tên trong game. Bộ cài Linux không cài web server hoặc ttyd.
+
+Các lệnh quản lý thường dùng:
+
+```text
+bot start <tên>     Chạy một bot
+bot start all       Chạy tất cả bot
+bot status all      Xem trạng thái
+bot attach <tên>    Mở cửa sổ bot
+bot restart <tên>   Khởi động lại một bot
+bot autostart on <tên>   Bật tự chạy khi máy khởi động
+bot autostart off <tên>  Tắt tự khởi động
+bot stop <tên>      Dừng một bot
+bot stop all        Dừng tất cả bot
+bot help            Xem thêm lệnh
+```
+
+Bot chạy trong tmux. Để rời cửa sổ mà không tắt bot, nhấn `Ctrl+B`, sau đó nhấn `D`. Nếu lệnh `bot` chưa có trong terminal hiện tại, mở terminal mới sau khi cài đặt.
+
+## Cấu hình và log
+
+`config.ini` ở thư mục ngoài cùng là **mẫu chung**. Khi tạo bot, bộ cài sao chép mẫu thành `bots/<tên>.ini` và thiết lập cho bot đó. Chỉnh file riêng của bot khi cần thay đổi cấu hình; thay đổi `config.ini` chỉ ảnh hưởng đến các bot tạo sau.
+
+Script đăng nhập nằm trong `scripts/` và có thể chứa mật khẩu. Không chia sẻ script, cấu hình cá nhân hay log công khai. Khi chạy bằng lệnh `bot`, log được lưu trong `~/.local/share/bot-afk/logs/bots/<tên>/`; mỗi file ghi từ 04:00 đến trước 04:00 hôm sau theo giờ máy, với thời gian tới mili giây. Một số lệnh đăng nhập thông thường được che mật khẩu, nhưng log vẫn có thể chứa nội dung riêng tư.
+
+## Build từ mã nguồn
+
+Cần .NET SDK 10. Ví dụ build Linux x64:
 
 ```bash
-dotnet publish mcc-src/MinecraftClient/MinecraftClient.csproj -c Release --arch x64 -o .
+dotnet publish mcc-src/MinecraftClient/MinecraftClient.csproj -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true
 ```
 
-Cần .NET SDK 10.0.
-
-## Cấu trúc repo
-
-- `install.sh` (+ `install.bat`, `install.ps1`) — installer: tạo bot mới từ `MinecraftClient.ini` + `bots/geasf.ini` (template), sinh `bots/<tên>.sh` + `scripts/login_<tên>.txt` tại máy cài
-- `bots/_bot` + `bots/bot-completion.bash` — lệnh `bot` và tab-completion
-- `download.py` — trang tải binary đơn giản qua LAN
-- `mcc-src/` — toàn bộ mã nguồn MCC fork (patch nằm chủ yếu ở `Protocol/Handlers/Protocol18.cs`, `Settings.cs`, `McClient.cs`)
-- `LICENSE` — CDDL 1.0 của MCCTeam/Minecraft-Console-Client
-
-## Lưu ý
-
-- Mật khẩu đăng nhập nằm trong `scripts/login_<tên>.txt` **chỉ tồn tại trên máy cài**, không được commit.
-- Repo không chứa binary — build tự động bằng [`.github/workflows/build.yml`](.github/workflows/build.yml).
-
-## Windows
-
-tmux **không chạy native trên Windows** (tmux cần Unix pty; Git Bash/Cygwin đều không đủ). Hai lối đi:
-
-1. **WSL2 (khuyên dùng)** — `wsl --install`, cài tmux trong WSL rồi chạy `./install.sh` như Linux. Bot chạy y hệt Linux: tmux session sống cả khi đóng cửa sổ, lệnh `bot`, AutoRelog...
-   `install.ps1` sẽ tự dò WSL: nếu có, nó hỏi "chạy mode WSL?" và gọi `install.sh` bên trong giúp bạn.
-2. **Native (không cần WSL)** — chạy `install.bat` hoặc `install.ps1`:
-   - Runner là vòng lặp `bots/<tên>.bat`/`.ps1` tự nối lại sau 70 s (thay cho tmux + AutoRelog), tự nhảy qua giờ bảo trì 04:00–05:20
-   - Tùy chọn Task Scheduler (`schtasks`) để bot chạy ngầm khi khởi động Windows
-   - Lệnh `bot` được ghi đè vào `%USERPROFILE%\.local\bin\bot.bat` (thư mục được thêm vào PATH người dùng nếu thiếu)
-   - Tải `MinecraftClient.exe` bản mới nhất từ release của MCCTeam (tự nhận diện x64/arm64)
-
-(Lựa chọn thú vị nếu muốn "tmux cảm giác thật" mà không dùng WSL: [psmux](https://gist.github.com/psmux/16e2c278b32c25c6a6663b6247ec24c3) — nhưng WSL2 vẫn là con đường mượt nhất cho bộ bot-manager này.)
+Thay `linux-x64` bằng `win-x64` để build Windows x64. GitHub Actions cũng build các bản Windows và Linux. Khả năng kết nối phụ thuộc cấu hình và quy định của server; hệ thống chống bot có thể từ chối client.

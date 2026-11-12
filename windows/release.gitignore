@@ -1,0 +1,16 @@
+**/bin/
+**/obj/
+*.exe
+*.dll
+*.pdb
+logs/
+scripts/login_*.txt
+bots/*.ini
+bots/*.bat
+bots/*.ps1
+*.log
+*.pcap
+.env
+
+# MCC runtime configuration may contain private account information
+/MinecraftClient.ini

@@ -12,7 +12,7 @@
 _BOT_COMPLETE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 _bot_complete_names() {
-    local reg="$_BOT_COMPLETE_ROOT/bots.conf" n
+    local reg="${BOT_REG_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/bot-afk/bots.conf}" n
     declare -A _seen=()
     # 1) từ registry bots.conf (dòng: ten|dir, # là comment)
     if [[ -f "$reg" ]]; then
@@ -46,7 +46,7 @@ _bot_complete() {
     prev="${COMP_WORDS[COMP_CWORD-1]}"
     cmd="${COMP_WORDS[1]:-}"
 
-    local -a cmds=(start stop restart list ls status st info add remove rm
+    local -a cmds=(start stop restart autostart list ls status st info add remove rm
                    download dl tunnel tn edit attach ta doctor help version)
     local -a flags=(-f --force -y --yes -a --all -A -p --purge)
     local -a dl_subs=(on off status stop)
@@ -81,7 +81,7 @@ _bot_complete() {
             fi
             return 0
             ;;
-        start|run|stop|kill|restart|rst|status|st|stat|info|edit|attach|ta|remove|rm|del|delete)
+        start|run|stop|kill|restart|rst|autostart|status|st|stat|info|edit|attach|ta|remove|rm|del|delete)
             # vị trí 1 = đang gõ tên lệnh (vd `bot st<TAB>`) -> gợi ý lệnh
             if [[ $COMP_CWORD -eq 1 ]]; then
                 COMPREPLY=($(compgen -W "${cmds[*]} $(_bot_complete_names)" -- "$cur"))

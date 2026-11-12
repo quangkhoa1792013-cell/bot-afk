@@ -42,3 +42,6 @@ nohup.out
 /caddy/
 /download-*.log
 *.old
+
+# MCC runtime configuration may contain private account information
+/MinecraftClient.ini

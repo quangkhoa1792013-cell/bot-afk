@@ -1,8 +1,8 @@
-# BOT MCC - Installer Windows (PowerShell)
+﻿# BOT MCC - Installer Windows (PowerShell)
 # Dung: powershell -ExecutionPolicy Bypass -File install.ps1
 # Co WSL2 -> mode WSL: chay install.sh Linux, bot hoat dong y het Linux (tmux that).
 # Khong WSL -> mode native: .bat/.ps1 loop + Task Scheduler (Windows khong co tmux).
-param()
+param([switch]$Native)
 
 function Expand-PathWin($p) {
     if ($p -eq ".") { return (Get-Location).Path }
@@ -19,30 +19,30 @@ function Ask($prompt, $def="") {
     if ([string]::IsNullOrWhiteSpace($inp)) { return $def } else { return $inp.Trim() }
 }
 
-Write-Host "=== BOT MCC Installer Windows ==="
-Write-Host "Thu muc cai dat (. cho hien tai, ho tro ~, .\, tuyet doi)"
-$targetRaw = Ask "Nhap vi tri thu muc" "."
+Write-Host "=== Cài đặt bot Minecraft trên Windows ==="
+Write-Host "Chọn thư mục để lưu bot. Nhập dấu chấm (.) nếu muốn dùng thư mục hiện tại."
+$targetRaw = Ask "Bạn muốn cài ở đâu?" "."
 $targetDir = [IO.Path]::GetFullPath((Expand-PathWin $targetRaw))
-Write-Host "[*] Se cai tai: $targetDir"
+Write-Host "Bot sẽ được cài tại: $targetDir"
 New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
 Set-Location $targetDir
 $repoDir = $PSScriptRoot
-Write-Host "[*] Dang o: $((Get-Location).Path)"
+Write-Host "Thư mục hiện tại: $((Get-Location).Path)"
 
 # ------------------------------------------------------------------
 # 0) WSL2 mode - chay ban Linux neu co
 # ------------------------------------------------------------------
 $haveWsl = $false
-if (Get-Command wsl.exe -ErrorAction SilentlyContinue) {
+if (-not $Native -and (Get-Command wsl.exe -ErrorAction SilentlyContinue)) {
     & wsl.exe -e true 2>$null | Out-Null
     if ($LASTEXITCODE -eq 0) { $haveWsl = $true }
 }
 if ($haveWsl) {
     Write-Host ""
-    Write-Host "=== Phat hien WSL ==="
-    Write-Host "Windows khong co tmux native. WSL2 chay duoc Linux that, bot hoat dong"
-    Write-Host "y het Linux: tmux session song ca khi dong cua so, CLI 'bot', AutoRelog..."
-    $useWsl = Ask "Chay cai dat Linux trong WSL ngay? (y/n)" "y"
+    Write-Host "=== Đã tìm thấy WSL ==="
+    Write-Host "Bạn có thể cài bản Linux trong WSL, hoặc tiếp tục với bản Windows."
+    Write-Host "Bản Linux có tmux và các lệnh quản lý bot của Linux."
+    $useWsl = Ask "Bạn muốn cài bản Linux trong WSL không? (y/n)" "y"
     if ($useWsl -eq "y") {
         $tempSh = Join-Path $env:TEMP "bot-install-wsl.sh"
         $repoFwd = $repoDir -replace '\\', '/'
@@ -53,16 +53,15 @@ if ($haveWsl) {
         $wslOut = & wsl.exe -e wslpath "$tempFwd/bot-install-wsl.sh" 2>$null
         if ($wslOut) {
             $wslSh = ($wslOut -join " ").Trim()
-            Write-Host "[*] Dang chay install.sh ben trong WSL ($wslSh)..."
+            Write-Host "Đang chạy bộ cài Linux trong WSL..."
             & wsl.exe -e bash $wslSh
             Write-Host ""
-            Write-Host "=== XONG mode WSL ==="
-            Write-Host "Neu ben tren khong loi: mo WSL (go 'wsl') roi chay 'bot <ten bot>'."
-            Write-Host "Bot da chay trong tmux session 'mc_bot' - mo lai: tmux attach -t mc_bot"
+            Write-Host "=== Đã chạy bộ cài WSL ==="
+            Write-Host "Nếu không có lỗi ở trên, mở WSL và chạy 'bot <tên bot>'."
+            Write-Host "Để xem các bot đang chạy, dùng: tmux attach -t mc_bot"
             exit 0
         } else {
-            Write-Host "[!] Khong lay duoc path qua wslpath ($tempSh) - lam thu cong:"
-            Write-Host "    Mo WSL roi chay:"
+            Write-Host "[!] Không chuyển được đường dẫn sang WSL. Bạn có thể mở WSL và chạy:"
             Write-Host "      cd $repoFwd && ./install.sh"
         }
     }
@@ -72,31 +71,28 @@ if ($haveWsl) {
 # 1) Native Windows mode
 # ------------------------------------------------------------------
 Write-Host ""
-Write-Host "=== Config ten va server (mode native: khong tmux, bot tu giu trong .bat/.ps1 loop) ==="
-$botDef = "geasf"; $srvDef = "kingmc.vn"
-$botIn = Ask "Ten bot (dung lam ten file, mac dinh $botDef, go q giu mac dinh)" $botDef
+Write-Host "=== Thiết lập bot cho Windows ==="
+$botDef = "Player"; $srvDef = "localhost"
+$botIn = Ask "Tên nhân vật của bạn là gì? (nhập q để dùng tên mặc định)" $botDef
 if ($botIn -eq "q" -or [string]::IsNullOrWhiteSpace($botIn)) { $botName = $botDef } else { $botName = $botIn }
-if ($botName -match '[\\/:*?"<>|\s]') {
-    $clean = $botName -replace '[\\/:*?"<>|\s]', '_'
-    Write-Host "[!] Ten '$botName' co ky tu khong duoc cho ten file doi thanh: $clean"
-    $botName = $clean
-}
-$srvIn = Ask "Server (mac dinh $srvDef, go q giu mac dinh)" $srvDef
+if ($botName -notmatch '^[A-Za-z0-9_]{1,16}$') { throw 'Tên bot phải có 1–16 chữ cái, chữ số hoặc dấu gạch dưới.' }
+$srvIn = Ask "Địa chỉ server là gì? (nhập q để dùng địa chỉ mặc định)" $srvDef
 if ($srvIn -eq "q" -or [string]::IsNullOrWhiteSpace($srvIn)) { $botServer = $srvDef } else { $botServer = $srvIn }
+if ($botServer -notmatch '^[A-Za-z0-9.\-:\[\]]+$') { throw 'Địa chỉ server không hợp lệ. Hãy kiểm tra và thử lại.' }
 $botIni = "bots\$botName.ini"
 $botScript = "scripts\login_$botName.txt"
-Write-Host "[*] Se dung: ten=$botName, server=$botServer"
+Write-Host "Bot: $botName | Server: $botServer"
 
 # --- 1.1 Chon file script ---
 Write-Host ""
-$scriptIn = Ask "Nhap path den file script co san (de trong = tao file moi)" ""
+$scriptIn = Ask "Bạn có script đăng nhập sẵn không? Nhập đường dẫn hoặc để trống để tạo mới" ""
 if (-not [string]::IsNullOrWhiteSpace($scriptIn) -and $scriptIn -ne "q") {
     $customPath = Expand-PathWin $scriptIn
     if (Test-Path $customPath) {
-        Write-Host "[*] Se dung file ban chi: $customPath"
+        Write-Host "Sẽ dùng script: $customPath"
         $useCustom = $true; $customSrc = $customPath
     } else {
-        Write-Host "[!] Khong thay $customPath - tao file moi"
+        Write-Host "[!] Không tìm thấy $customPath. Sẽ tạo file mới."
         $useCustom = $false
     }
 } else { $useCustom = $false }
@@ -104,23 +100,35 @@ if (-not [string]::IsNullOrWhiteSpace($scriptIn) -and $scriptIn -ne "q") {
 # --- 2) Tao cau truc ---
 New-Item -ItemType Directory -Force -Path "bots","scripts","logs" | Out-Null
 
-# Tao bots\<ten>.ini: uu tien MinecraftClient.ini (ban repo) -> khong thi tao toi thieu
-Write-Host "[*] Tao $botIni ..."
+# Sao chep cau hinh mau cho tung bot; ho tro ten cu neu chua co config.ini.
+Write-Host "Đang chuẩn bị cấu hình cho $botName..."
+if (Test-Path $botIni) { throw "File $botIni đã tồn tại. Hãy chọn tên bot khác để giữ nguyên cấu hình cũ." }
 $iniContent = $null
-if (Test-Path "$targetDir\MinecraftClient.ini") {
-    Copy-Item "$targetDir\MinecraftClient.ini" $botIni -Force -ErrorAction SilentlyContinue
-} elseif (Test-Path "$repoDir\MinecraftClient.ini") {
-    Copy-Item "$repoDir\MinecraftClient.ini" $botIni -Force
+$templateCandidates = @(
+    (Join-Path $targetDir 'config.ini'),
+    (Join-Path $repoDir 'config.ini'),
+    (Join-Path $targetDir 'MinecraftClient.ini'),
+    (Join-Path $repoDir 'MinecraftClient.ini')
+)
+foreach ($template in $templateCandidates) {
+    if (Test-Path -LiteralPath $template -PathType Leaf) {
+        Copy-Item -LiteralPath $template -Destination $botIni -ErrorAction Stop
+        break
+    }
 }
 if (-not (Test-Path $botIni)) {
     $iniContent = @'
 [Main.Advanced]
 ExitOnFailure = true
 CacheScript = true
-BrandInfo = "fabric"
+BrandInfo = "vanilla"
 MinecraftVersion = "1.21.11"
+TerrainAndMovements = true
 InventoryHandling = true
 EntityHandling = true
+
+[ChatBot.AutoRelog]
+Enabled = true
 
 [ChatBot.ScriptScheduler]
 Enabled = true
@@ -135,26 +143,59 @@ Action = "script __SCRIPT__"
     # Encoding ASCII de tranh BOM lam lo hang dau file ini
     $iniContent | Set-Content $botIni -Encoding ASCII
 }
-(Get-Content $botIni) -replace 'ExitOnFailure = false','ExitOnFailure = true' | Set-Content $botIni -Encoding ASCII
+$configText = [IO.File]::ReadAllText((Join-Path $targetDir $botIni))
+$configText = $configText -replace 'ExitOnFailure\s*=\s*false', 'ExitOnFailure = true'
+$configText = $configText -replace 'TerrainAndMovements\s*=\s*false', 'TerrainAndMovements = true'
+$configText = $configText -replace 'EnableSentry\s*=\s*true', 'EnableSentry = false'
+$noConfirm = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('a2jDtG5nIHjDoWMgbmjhuq1uIMSRxrDhu6NjIGNsaWVudA=='))
+$temporaryBlock = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('dOG6oW0gdGjhu51pIGLhu4sgY2jhurduIGLhu59pIGjhu4cgdGjhu5FuZyBjaOG7kW5nIGJvdA=='))
+$maintenance = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('YuG6o28gdHLDrA=='))
+$restart = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('TcOBWSBDSOG7piBLSOG7nkkgxJDhu5hORyBM4bqgSQ=='))
+$relogConfig = @'
+[ChatBot.AutoRelog]
+Enabled = true
+Delay = { min = 90.0, max = 150.0 }
+Retries = -1
+Ignore_Kick_Message = false
+Kick_Messages = ["Connection has been lost", "Server is restarting", "Server is full", "bao tri", "__MAINTENANCE__", "__RESTART__", "__NO_CONFIRM__", "__TEMP_BLOCK__"]
+
+'@.Replace('__NO_CONFIRM__', $noConfirm).Replace('__TEMP_BLOCK__', $temporaryBlock).Replace('__MAINTENANCE__', $maintenance).Replace('__RESTART__', $restart)
+$configText = [regex]::Replace($configText, '(?ms)^\[ChatBot\.AutoRelog\].*?(?=^\[ChatBot\.|\z)', $relogConfig)
+$configText = [regex]::Replace($configText, '(?ms)^\[ChatBot\.ScriptScheduler\].*?(?=^\[ChatBot\.(?!ScriptScheduler)|\z)', @'
+[ChatBot.ScriptScheduler]
+Enabled = true
+
+[[ChatBot.ScriptScheduler.TaskList]]
+Task_Name = "Login script"
+Trigger_On_First_Login = false
+Trigger_On_Login = true
+Trigger_On_Times = { Enable = false, Times = [] }
+Trigger_On_Interval = { Enable = false, MinTime = 1.0, MaxTime = 10.0 }
+Action = "script __SCRIPT__"
+
+'@.Replace('__SCRIPT__', $botScript.Replace('\', '/')))
+[IO.File]::WriteAllText((Join-Path $targetDir $botIni), $configText, (New-Object System.Text.UTF8Encoding($false)))
 
 # --- 2.1 Tao script login ---
 if ($useCustom) {
-    Copy-Item $customSrc $botScript -Force
-    Write-Host "[*] Da copy script $customSrc -> $botScript"
+    if (Test-Path $botScript) { throw "File $botScript đã tồn tại; script cũ sẽ được giữ nguyên." }
+    Copy-Item $customSrc $botScript
+    Write-Host "Đã sao chép script vào $botScript."
 } elseif (-not (Test-Path $botScript)) {
     Write-Host ""
-    Write-Host "=== Script login (tu dong chay khi vao server) ==="
-    $loginInput = Ask "Nhap lenh login (vd: /dn $botName), de trong = file rong" ""
+    Write-Host "=== Script đăng nhập ==="
+    $loginInput = Ask "Nhập lệnh đăng nhập server, hoặc để trống để tự sửa script sau" ""
     if ([string]::IsNullOrWhiteSpace($loginInput)) {
-        @'
+        $scriptText = @'
 # Hay sua file nay - them lenh login cua ban
 # Vi du:
 # wait 140
 # send /dn __BOT__
-'@.Replace('__BOT__', $botName) | Set-Content $botScript -Encoding ASCII
-        Write-Host "[!] Da tao $botScript RONG - hay mo va sua lai!"
+'@.Replace('__BOT__', $botName)
+        [IO.File]::WriteAllText((Join-Path $targetDir $botScript), $scriptText, (New-Object System.Text.UTF8Encoding($false)))
+        Write-Host "Đã tạo $botScript. Bạn có thể mở file này để thêm lệnh đăng nhập."
     } else {
-        @'
+        $scriptText = @'
 send da hoat dong
 wait 140
 send __LOGIN__
@@ -168,8 +209,9 @@ wait 60
 send /afk
 wait 40
 inventory 1 click 22
-'@.Replace('__LOGIN__', $loginInput) | Set-Content $botScript -Encoding ASCII
-        Write-Host "[*] Da tao $botScript voi lenh $loginInput"
+'@.Replace('__LOGIN__', $loginInput)
+        [IO.File]::WriteAllText((Join-Path $targetDir $botScript), $scriptText, (New-Object System.Text.UTF8Encoding($false)))
+        Write-Host "Đã tạo script đăng nhập tại $botScript. Hãy giữ file này riêng tư."
     }
 }
 
@@ -179,30 +221,12 @@ $botPs1 = "bots\$botName.ps1"
 
 $batContent = @'
 @echo off
-setlocal enabledelayedexpansion
-title MCC Bot __BOT__
-REM Baton __BOT__ @ __SRV__ - chay lai vong lap, tu dong skip bao tri 04:00-05:20
-cd /d "%~dp0.."
-set "ACCOUNT=__BOT__"
-set "SERVER=__SRV__"
-set "INI=__INI__"
-:notconnected
-for /f "tokens=1,2 delims=:" %%a in ("%time: =0%") do (set "CH=%%a" & set "CM=%%b")
-set /a CUR_TOTAL=(1%CH%-100)*60+(1%CM%-100) 2>nul
-if %CUR_TOTAL% GEQ 240 if %CUR_TOTAL% LSS 320 (
-    echo Bao tri 04:00-05:20, nghi 30s truoc thu lai...
-    timeout /t 30 /nobreak >nul
-    goto notconnected
-)
-echo Dang ket noi: MinecraftClient %INI% %ACCOUNT% - %SERVER%
-MinecraftClient.exe "%INI%" "%ACCOUNT%" - "%SERVER%"
-echo Thoat exit %errorlevel%
-echo Nghi 70s roi thu lai (tranh chan IP spam connect)
-timeout /t 70 /nobreak >nul
-goto notconnected
+setlocal
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0__BOT__.ps1"
+exit /b %ERRORLEVEL%
 '@.Replace('__BOT__', $botName).Replace('__SRV__', $botServer).Replace('__INI__', $botIni)
 $batContent | Set-Content $botBat -Encoding ASCII
-Write-Host "[*] Tao $botBat"
+Write-Host "Đã tạo file chạy bot: $botBat"
 
 $psContent = @'
 # BOT: __BOT__ @ __SRV__ - PowerShell runner (thay cho tmux tren Windows)
@@ -211,53 +235,54 @@ while ($true) {
     $now = Get-Date
     $c = $now.Hour*60 + $now.Minute
     if ($c -ge 240 -and $c -lt 320) {
-        Write-Host "Bao tri 04:00-05:20, nghi 30s..."
+        Write-Host "Đang trong giờ bảo trì 04:00–05:20. Sẽ kiểm tra lại sau 30 giây."
         Start-Sleep 30
         continue
     }
-    Write-Host ("Dang ket noi: " + (Get-Date -Format "yyyy-MM-dd HH:mm:ss"))
-    $p = Start-Process -Wait -PassThru -FilePath ".\MinecraftClient.exe" -ArgumentList @("__INI__", "__BOT__", "-", "__SRV__")
-    Write-Host ("Thoat exit " + $p.ExitCode + " - doi 70s")
+    Write-Host ("Đang kết nối... " + (Get-Date -Format "yyyy-MM-dd HH:mm:ss"))
+    $p = Start-Process -Wait -PassThru -NoNewWindow -FilePath ".\MinecraftClient.exe" -ArgumentList @("__INI__", "__BOT__", "-", "__SRV__")
+    Write-Host ("Bot đã thoát (mã " + $p.ExitCode + "). Sẽ thử lại sau 70 giây.")
     Start-Sleep 70
 }
 '@.Replace('__BOT__', $botName).Replace('__SRV__', $botServer).Replace('__INI__', $botIni)
-$psContent | Set-Content $botPs1 -Encoding ASCII
-Write-Host "[*] Tao $botPs1"
+[IO.File]::WriteAllText((Join-Path $targetDir $botPs1), $psContent, (New-Object System.Text.UTF8Encoding($true)))
+Write-Host "Đã tạo script chạy bot: $botPs1"
 
 # --- 2.3 MinecraftClient.exe ---
 if (-not (Test-Path "MinecraftClient.exe")) {
     if (Test-Path "$repoDir\MinecraftClient.exe") {
         Copy-Item "$repoDir\MinecraftClient.exe" "MinecraftClient.exe"
-        Write-Host "[*] Copy MinecraftClient.exe tu thu muc repo"
+        Write-Host "Đã sao chép MinecraftClient.exe từ thư mục cài đặt."
     } else {
         $arch = "win-x64"
-        if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { $arch = "win-arm64" }
-        Write-Host "[*] Chua co MinecraftClient.exe - tai ban moi ($arch) tu GitHub..."
+        if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { Write-Host '[!] Windows ARM cần hỗ trợ chạy ứng dụng x64.' }
+        Write-Host "Chưa có MinecraftClient.exe. Đang tìm bản $arch trên GitHub..."
         $asset = $null
         try {
-            $rel = Invoke-RestMethod "https://api.github.com/repos/MCCTeam/Minecraft-Console-Client/releases/latest" -TimeoutSec 15
-            $asset = $rel.assets | Where-Object { $_.name -like "*$arch*" } | Select-Object -First 1
-        } catch { Write-Host "[!] API GitHub loi - thu fallback URL" }
+            $rel = Invoke-RestMethod "https://api.github.com/repos/quangkhoa1792013-cell/bot-afk/releases/latest" -TimeoutSec 15
+            $asset = $rel.assets | Where-Object { $_.name -eq "MinecraftClient-$arch.exe" } | Select-Object -First 1
+        } catch { Write-Host "[!] Không truy cập được trang phát hành của dự án." }
         if ($asset -and $asset.browser_download_url) {
             try {
                 Invoke-WebRequest -Uri $asset.browser_download_url -OutFile "MinecraftClient.exe" -UseBasicParsing
-            } catch { Write-Host "[!] Tai that bai: $($_.Exception.Message)" }
+            } catch { Write-Host "[!] Không tải được file: $($_.Exception.Message)" }
         }
         if (Test-Path "MinecraftClient.exe") {
-            Write-Host "[*] Da tai $arch -> MinecraftClient.exe"
+            Write-Host "Đã tải bản $arch về MinecraftClient.exe."
         } else {
-            Write-Host "[!] Tai that bai - tai tay tu:"
-            Write-Host "    https://github.com/MCCTeam/Minecraft-Console-Client/releases"
-            Write-Host "    Dat file 'MinecraftClient.exe' tai $((Get-Location).Path)"
+            Write-Host "[!] Tải tự động không thành công. Bạn có thể tải thủ công tại:"
+            Write-Host "    https://github.com/quangkhoa1792013-cell/bot-afk/releases"
+            Write-Host "    Sau đó đặt file 'MinecraftClient.exe' vào $((Get-Location).Path)"
+            throw 'Chưa tìm thấy MinecraftClient.exe của dự án.'
         }
     }
 } else {
-    Write-Host "[*] MinecraftClient.exe san co - bo qua tai"
+    Write-Host "Đã có MinecraftClient.exe, không cần tải lại."
 }
 
 # --- 3) Alias bot -> USERPROFILE\.local\bin\bot.bat (ghi de file cu neu co) ---
 Write-Host ""
-$needAlias = Ask "Them lenh 'bot'? (y/n)" "y"
+$needAlias = Ask "Bạn có muốn thêm lệnh 'bot' vào terminal không? (y/n)" "y"
 if ($needAlias -eq "y") {
     $localBin = Join-Path $env:USERPROFILE ".local\bin"
     New-Item -ItemType Directory -Force -Path $localBin | Out-Null
@@ -281,11 +306,11 @@ if "%~1"=="" (
     # Xoa file alias kiem tim cu (khai giu PATH nguoi dung)
     if (Test-Path "$env:USERPROFILE\bot.bat") {
         Remove-Item "$env:USERPROFILE\bot.bat" -Force -ErrorAction SilentlyContinue
-        Write-Host "[*] Xoa alias cu $env:USERPROFILE\bot.bat (doi sang $aliasPath)"
+        Write-Host "Đã xóa lệnh bot cũ tại $env:USERPROFILE\bot.bat."
     }
     # Ghi de file (neu co - Set-Content tranh dong chay lai mau cu)
     $aliasContent | Set-Content $aliasPath -Encoding ASCII
-    Write-Host "[*] Ghi de alias tai $aliasPath"
+    Write-Host "Đã lưu lệnh bot tại $aliasPath."
     # Dam bao .local\bin nam trong PATH cua User (khong lam vo PATH hien tai)
     $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
     if ($null -eq $userPath) { $userPath = "" }
@@ -295,33 +320,32 @@ if "%~1"=="" (
         else { $newPath = "$userPath;$localBin" }
         [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
         $env:Path = "$env:Path;$localBin"
-        Write-Host "[*] Da them $localBin vao PATH (mo terminal moi de ap dung)"
+        Write-Host "Đã thêm $localBin vào PATH. Hãy mở terminal mới để dùng lệnh bot."
     }
-    Write-Host "    Dung: bot (liet ke) hoac bot $botName"
+    Write-Host "    Gõ 'bot' để xem danh sách, hoặc 'bot $botName' để chạy bot."
 }
 
 # --- 4) Task Scheduler (chay ngam luc khoi Windows) ---
 Write-Host ""
-$needTask = Ask "Tao Task chay ngam khi khoi Windows? (y/n)" "y"
+$needTask = Ask "Bạn có muốn bot tự chạy khi đăng nhập Windows không? (y/n)" "y"
 if ($needTask -eq "y") {
     $taskName = "MC_Bot_$botName"
     $tr = "`"$targetDir\bots\$botName.bat`""
-    schtasks /create /tn $taskName /tr $tr /sc onlogon /rl highest /f 2>$null
+    schtasks /create /tn $taskName /tr $tr /sc onlogon /rl limited /f 2>$null
     if ($LASTEXITCODE -eq 0) {
-        Write-Host "[*] Da tao Task $taskName (bat dau moc chay khi khoi dong)"
-        Write-Host "    Chay ngay:  schtasks /run /tn $taskName"
-        Write-Host "    Xem:        schtasks /query /tn $taskName"
-        Write-Host "    Xoa:        schtasks /delete /tn $taskName /f"
+        Write-Host "Đã tạo task $taskName. Bot sẽ chạy khi bạn đăng nhập Windows."
+        Write-Host "    Chạy ngay:  schtasks /run /tn $taskName"
+        Write-Host "    Xem task:   schtasks /query /tn $taskName"
+        Write-Host "    Xóa task:   schtasks /delete /tn $taskName /f"
     } else {
-        Write-Host "[!] Khong tao duoc Task - can chay PowerShell o che do Admin (run as Administrator)"
-        Write-Host "    (ho bo qua va chay tay: $targetDir\bots\$botName.bat)"
+        Write-Host "[!] Không tạo được task. Hãy kiểm tra quyền và thử lại, hoặc chạy bot thủ công:"
+        Write-Host "    $targetDir\bots\$botName.bat"
     }
 } else {
-    Write-Host "[*] Bo qua Task Scheduler - chay tay: $targetDir\bots\$botName.bat hoac bot $botName"
+    Write-Host "Đã bỏ qua Task Scheduler. Bạn có thể chạy bot thủ công bằng $targetDir\bots\$botName.bat."
 }
 
 Write-Host ""
-Write-Host "=== XONG (mode native Windows) ==="
-Write-Host "Thu muc: $targetDir"
-Write-Host "Chay thu: bots\$botName.bat  hoac  bot $botName"
-Write-Host "Copy sang may khac: chi can copy thu muc $repoDir roi chay install.ps1 (khong can cai them gi)"
+Write-Host "=== Cài đặt xong ==="
+Write-Host "Thư mục bot: $targetDir"
+Write-Host "Để chạy, mở bots\$botName.bat hoặc gõ 'bot $botName' trong terminal mới."

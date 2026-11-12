@@ -2,61 +2,121 @@ name: build
 
 on:
   push:
-    branches: [bot-manager, main]
+    branches: [bot-manager, main, windows-release]
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
     strategy:
+      fail-fast: false
       matrix:
-        arch: [x64, arm64]
+        include:
+          - { os: ubuntu-24.04, rid: linux-x64, executable: MinecraftClient }
+          - { os: ubuntu-24.04, rid: linux-arm64, executable: MinecraftClient }
+          - { os: windows-latest, rid: win-x64, executable: MinecraftClient.exe }
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '10.0.402'
+          dotnet-version: '10.0.x'
 
-      - name: Publish linux-${{ matrix.arch }}
+      - name: Test Linux installer and autostart command
+        if: matrix.rid == 'linux-x64'
+        shell: bash
         run: |
-          set -o pipefail
-          dotnet --list-sdks
-          if dotnet publish mcc-src/MinecraftClient/MinecraftClient.csproj -c Release --arch ${{ matrix.arch }} -o out 2>&1 | tee publish.log; then
-            echo "publish ok"
-          else
-            tail -n 60 publish.log | head -n 40 | while IFS= read -r line; do
-              echo "::error::${{ matrix.arch }}: $line"
-            done
-            exit 1
-          fi
+          bash tests/test_install_offline.sh
+          bash tests/test_bot_autostart.sh
 
-      - name: Rename artifact
-        run: cp out/MinecraftClient MinecraftClient-linux-${{ matrix.arch }}
+      - name: Test
+        run: dotnet test mcc-src/MinecraftClient.Tests/MinecraftClient.Tests.csproj -c Release -p:UsedAvaloniaProducts= -p:UseSharedCompilation=false
+
+      - name: Publish
+        run: dotnet publish mcc-src/MinecraftClient/MinecraftClient.csproj -c Release -r ${{ matrix.rid }} --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:UsedAvaloniaProducts= -p:UseSharedCompilation=false -o out
+
+      - name: Check Windows executable starts
+        if: matrix.rid == 'win-x64'
+        shell: pwsh
+        run: |
+          $process = Start-Process -FilePath (Join-Path $PWD 'out/MinecraftClient.exe') -ArgumentList '--help', 'BasicIO' -Wait -PassThru -NoNewWindow
+          if ($process.ExitCode -ne 0) { throw "MinecraftClient --help failed: $($process.ExitCode)" }
+
+      - name: Check Windows installer syntax and build package
+        if: matrix.rid == 'win-x64'
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PWD 'install.ps1'), [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) { $errors | ForEach-Object { Write-Error $_ }; throw 'Windows installer syntax error' }
+          & ./windows/test_installer.ps1
+          New-Item -ItemType Directory -Path windows-package | Out-Null
+          Copy-Item out/MinecraftClient.exe, config.ini, install.ps1, install.bat, LICENSE, README.md windows-package/
+          Compress-Archive -Path windows-package/* -DestinationPath out/bot-afk-windows-x64.zip
+
+      - name: Build offline Linux package
+        if: startsWith(matrix.rid, 'linux-')
+        shell: bash
+        run: |
+          package="bot-afk-${{ matrix.rid }}"
+          mkdir -p "$package/bin" "$package/bots"
+          cp out/MinecraftClient "$package/MinecraftClient"
+          cp install.sh config.ini README.md LICENSE "$package/"
+          cp bin/bot bin/bot_tmux_run.sh bin/bot_tmux_log.sh bin/bot_cycle_log.py "$package/bin/"
+          cp bots/bot-completion.bash bots/_bot "$package/bots/"
+          chmod +x "$package/install.sh" "$package/MinecraftClient" "$package/bin/bot"
+          tar -czf "out/$package.tar.gz" "$package"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: MinecraftClient-linux-${{ matrix.arch }}
-          path: MinecraftClient-linux-${{ matrix.arch }}
+          name: MinecraftClient-${{ matrix.rid }}
+          path: out/${{ matrix.executable }}
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        if: matrix.rid == 'win-x64'
+        with:
+          name: bot-afk-windows-x64
+          path: out/bot-afk-windows-x64.zip
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        if: startsWith(matrix.rid, 'linux-')
+        with:
+          name: bot-afk-${{ matrix.rid }}
+          path: out/bot-afk-${{ matrix.rid }}.tar.gz
           if-no-files-found: error
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:
-          path: rel
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir release
+          cp artifacts/MinecraftClient-linux-x64/MinecraftClient release/MinecraftClient-linux-x64
+          cp artifacts/MinecraftClient-linux-arm64/MinecraftClient release/MinecraftClient-linux-arm64
+          cp artifacts/MinecraftClient-win-x64/MinecraftClient.exe release/MinecraftClient-win-x64.exe
+          cp artifacts/bot-afk-windows-x64/bot-afk-windows-x64.zip release/bot-afk-windows-x64.zip
+          cp artifacts/bot-afk-linux-x64/bot-afk-linux-x64.tar.gz release/bot-afk-linux-x64.tar.gz
+          cp artifacts/bot-afk-linux-arm64/bot-afk-linux-arm64.tar.gz release/bot-afk-linux-arm64.tar.gz
+          sha256sum release/* > release/SHA256SUMS.txt
 
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" rel/*/MinecraftClient-linux-* \
-            --title "MinecraftClient ${GITHUB_REF_NAME}" \
-            --notes "Build tự động: linux-x64 + linux-arm64 (kèm patch fake client KingMC). Cách dùng: chmod +x MinecraftClient-linux-* rồi đổi tên thành MinecraftClient."
+          gh release create "$GITHUB_REF_NAME" release/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
