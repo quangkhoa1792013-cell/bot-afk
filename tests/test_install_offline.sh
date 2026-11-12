@@ -30,7 +30,7 @@ grep -Fq "DemoBot|$root/bots" "$test_home/.config/bot-afk/bots.conf"
 grep -Fq 'ConsoleMode = "classic"' "$root/bots/DemoBot.ini"
 bash -n "$root/bots/DemoBot.sh" "$root/bots/DemoBot_tmux.sh"
 HOME="$test_home" XDG_CONFIG_HOME="$test_home/.config" \
-    "$test_home/.local/bin/bot" list | grep -Fq DemoBot
+    "$test_home/.local/bin/bot" list | grep -F DemoBot >/dev/null
 
 custom="$tmp/custom-location"
 printf '%s\n%s\n%s\n%s\n%s\n%s\n%s\n' \
