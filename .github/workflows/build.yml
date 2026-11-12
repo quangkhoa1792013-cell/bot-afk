@@ -33,6 +33,7 @@ jobs:
         run: |
           bash tests/test_install_offline.sh
           bash tests/test_bot_autostart.sh
+          bash tests/test_bot_recovers_unregistered.sh
 
       - name: Test
         run: dotnet test mcc-src/MinecraftClient.Tests/MinecraftClient.Tests.csproj -c Release -p:UsedAvaloniaProducts= -p:UseSharedCompilation=false

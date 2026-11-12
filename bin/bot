@@ -160,6 +160,26 @@ registry_seed() {
     return 0
 }
 
+# Tìm lại một bot đã được tạo nhưng bị thiếu khỏi registry. Chỉ tìm ở các vị
+# trí cài đặt quen thuộc, tránh quét đệ quy toàn bộ HOME mỗi lần gõ lệnh.
+reg_discover_name() {
+    local name="$1" f dir
+    [[ "$name" =~ ^[A-Za-z0-9_-]+$ ]] || return 1
+
+    for f in "$HOME"/*/bots/"$name.sh" \
+             "$PROJECT_DIR"/bots/"$name.sh" \
+             "$PROJECT_DIR"/*/bots/"$name.sh" \
+             "$PROJECT_DIR"/*/*/bots/"$name.sh"; do
+        [ -f "$f" ] || continue
+        dir="$(cd "$(dirname "$f")" && pwd)"
+        reg_set "$name" "$dir"
+        reg_save
+        ok "Đã tìm thấy và đăng ký lại bot '$name' tại $dir."
+        return 0
+    done
+    return 1
+}
+
 # ============================================================================
 #  RESOLVE thông tin từng bot (mọi thứ suy ra từ name + dir)
 # ============================================================================
@@ -532,6 +552,11 @@ cmd_start() {
     fi
     local n rc=0 first=1
     for n in "${targets[@]}"; do
+        if ! reg_has "$n" && ! reg_discover_name "$n"; then
+            err "không có bot '$n' ('bot ls' để xem danh sách)"
+            rc=1
+            continue
+        fi
         # nhiều bot bật cùng lúc → mỗi con cách 3s rồi vào (tránh login dồn bị kick)
         if [ "$first" = 0 ]; then
             say "${D}Đợi 3 giây trước khi khởi động bot tiếp theo...${X}"
@@ -722,7 +747,7 @@ cmd_add() { # bot add [path] — không path: hỏi kiểu (1=cài mới, 2=ghi 
                 return 1
             fi
             say "${D}Đang mở bộ cài. Nhấn Ctrl+C nếu bạn muốn hủy.${X}"
-            bash "$PROJECT_DIR/install.sh"
+            BOT_REG_FILE="$REG_FILE" bash "$PROJECT_DIR/install.sh"
             return $?
         fi
     fi
@@ -731,7 +756,7 @@ cmd_add() { # bot add [path] — không path: hỏi kiểu (1=cài mới, 2=ghi 
         *.txt)
             [ -f "${p/#\~/$HOME}" ] || { err "không thấy file '$p'"; return 1; }
             say "${D}Đang tạo bot từ script: $p${X}"
-            bash "$PROJECT_DIR/install.sh" --script "$p"
+            BOT_REG_FILE="$REG_FILE" bash "$PROJECT_DIR/install.sh" --script "$p"
             return $?
             ;;
     esac
@@ -1283,7 +1308,7 @@ case "$cmd" in
         reg_load; registry_seed; cmd_doctor ;;
     *)
         reg_load; registry_seed
-        if reg_has "$cmd"; then
+        if reg_has "$cmd" || reg_discover_name "$cmd"; then
             say "${D}[hint] 'bot $cmd' = 'bot start $cmd'${X}"
             exec "$0" start "$cmd" "$@"
         fi

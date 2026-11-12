@@ -270,7 +270,7 @@ install_binary
 chmod +x "$TARGET_DIR/MinecraftClient"
 
 SHARE_DIR="$HOME/.local/share/bot-afk"
-REG_DIR="$HOME/.config/bot-afk"
+REG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/bot-afk"
 mkdir -p "$SHARE_DIR/bin" "$SHARE_DIR/completions" "$HOME/.local/bin" "$REG_DIR"
 cp "$INSTALLER_DIR/install.sh" "$SHARE_DIR/install.sh"
 [ -f "$INSTALLER_DIR/config.ini" ] && cp "$INSTALLER_DIR/config.ini" "$SHARE_DIR/config.ini"
@@ -286,7 +286,8 @@ done
 [ -f "$INSTALLER_DIR/bots/_bot" ] \
     && cp "$INSTALLER_DIR/bots/_bot" "$SHARE_DIR/completions/_bot"
 
-REG_FILE="$REG_DIR/bots.conf"
+REG_FILE="${BOT_REG_FILE:-$REG_DIR/bots.conf}"
+mkdir -p "$(dirname "$REG_FILE")"
 touch "$REG_FILE"
 awk -F'|' -v name="$BOT_NAME" '$1 != name' "$REG_FILE" > "$REG_FILE.tmp"
 printf '%s|%s\n' "$BOT_NAME" "$TARGET_DIR/bots" >> "$REG_FILE.tmp"

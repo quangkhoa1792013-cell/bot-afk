@@ -9,7 +9,8 @@ test_home="$tmp/home"
 mkdir -p "$test_home"
 
 printf '\n\nDemoBot\ny\n\n\n\n' |
-    HOME="$test_home" USER="tester" BOT_BINARY_SOURCE="/bin/true" \
+    HOME="$test_home" XDG_CONFIG_HOME="$test_home/.config" \
+    USER="tester" BOT_BINARY_SOURCE="/bin/true" \
     bash "$repo/install.sh"
 
 root="$test_home/DemoBot"
@@ -34,10 +35,21 @@ HOME="$test_home" XDG_CONFIG_HOME="$test_home/.config" \
 custom="$tmp/custom-location"
 printf '%s\n%s\n%s\n%s\n%s\n%s\n%s\n' \
     "$custom" short PlayerTwo n play.example.com '' '' |
-    HOME="$test_home" USER="tester" BOT_BINARY_SOURCE="/bin/true" \
+    HOME="$test_home" XDG_CONFIG_HOME="$test_home/.config" \
+    USER="tester" BOT_BINARY_SOURCE="/bin/true" \
     bash "$repo/install.sh"
 [ -f "$custom/bots/short.sh" ] || { echo 'FAIL: custom path or nickname was ignored'; exit 1; }
 [ ! -e "$custom/PlayerTwo" ] || { echo 'FAIL: game name was appended to a custom path'; exit 1; }
 grep -Fq "short|$custom/bots" "$test_home/.config/bot-afk/bots.conf"
+
+active_registry="$tmp/active-bot-registry.conf"
+third="$tmp/third-location"
+printf '%s\n%s\n%s\n%s\n%s\n%s\n%s\n' \
+    "$third" 123 PlayerThree n kingmc.vn '' '' |
+    HOME="$test_home" XDG_CONFIG_HOME="$test_home/.config" \
+    USER="tester" BOT_BINARY_SOURCE="/bin/true" \
+    BOT_REG_FILE="$active_registry" bash "$repo/install.sh"
+grep -Fq "123|$third/bots" "$active_registry" \
+    || { echo 'FAIL: installer did not register the bot in BOT_REG_FILE'; exit 1; }
 
 echo 'PASS: offline installer creates a minimal bot installation'
